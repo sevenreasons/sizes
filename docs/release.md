@@ -1,12 +1,8 @@
-# v0.1.0
+# Release checklist
 
-Initial public release.
-
-- Pretty table output grouped by extension
-- Recursive and non-recursive scans
-- Optional row limit with `OTHER`
-- Color/no-color support
-- Shell completions
-- Tests and CI
-- GNU `find` / `gfind` detection
-- Checkout wrapper: `./sizes`
+```sh
+sh tests/run.sh
+shellcheck sizes.sh sizes tests/run.sh
+git tag v0.2.0
+git push origin master --tags
+```

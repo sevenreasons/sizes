@@ -1,11 +1,16 @@
 #compdef sizes
 
-_arguments \
+_arguments -s -S \
   '(-r --recursive)'{-r,--recursive}'[scan recursively]' \
-  '(-n --limit)'{-n,--limit}'[show top N extensions and fold the rest into OTHER]:limit:(10 20 30 40 50 100)' \
-  '(-e --exact)'{-e,--exact}'[do not merge aliases like JPEG -> JPG]' \
+  '(-n --limit)'{-n,--limit}'[show top N rows and combine the rest into OTHER]:limit:(10 20 25 40 50 100)' \
+  '(-e --exact)'{-e,--exact}'[do not merge extension aliases like JPEG -> JPG]' \
   '(-E --errors)'{-E,--errors}'[print unreadable-path errors after the table]' \
+  '--exclude[exclude matching paths; can be repeated]:pattern:_files' \
+  '--sort[sort output]:field:(size files share ext type)' \
+  '--format[output format]:format:(table tsv csv json)' \
+  '--group-by[group rows]:field:(ext type)' \
+  '--plain[use simple ASCII table]' \
   '--no-color[disable ANSI colors]' \
   '--version[print version]' \
   '(-h --help)'{-h,--help}'[show help]' \
-  '1:directory:_files -/'
+  '1:directory:_directories'

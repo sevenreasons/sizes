@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
-- Add CI badge and concise README.
-- Auto-detect `gfind` when GNU `find` is installed as `gfind`.
-- Replace duplicate root executable with a wrapper around `sizes.sh`.
+- Add `--sort` for sorting by size, files, share, extension, or type.
+- Add `--format` with table, TSV, CSV, and JSON output.
+- Add repeatable `--exclude` path filtering.
+- Add `--group-by type` for type-level summaries.
+- Add `--plain` ASCII output mode.
+- Expand extension type detection.
+- Update completions and tests for the new CLI.
 
 ## 0.1.0
 

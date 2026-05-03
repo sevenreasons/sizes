@@ -20,69 +20,146 @@ fail() {
 }
 
 assert_contains() {
-    haystack=$1
-    needle=$2
-    name=$3
-    printf '%s' "$haystack" | grep -F -- "$needle" >/dev/null || fail "$name"
-}
-
-assert_not_contains_ansi() {
     file=$1
-    name=$2
-    if grep -q "$(printf '\033')" "$file"; then
-        fail "$name"
+    pattern=$2
+    message=$3
+    if ! grep -Eq -- "$pattern" "$file"; then
+        printf '\n--- output ---\n' >&2
+        cat "$file" >&2
+        printf '\n-------------\n' >&2
+        fail "$message"
     fi
 }
 
-mkdir -p "$TEST_ROOT/sample/sub" "$TEST_ROOT/empty"
-printf 'abc' > "$TEST_ROOT/sample/a.txt"
-printf 'defgh' > "$TEST_ROOT/sample/b.jpg"
-printf 'ijklmno' > "$TEST_ROOT/sample/c.jpeg"
-printf 'nested' > "$TEST_ROOT/sample/sub/d.json"
-printf 'hidden' > "$TEST_ROOT/sample/.hidden"
+assert_not_contains() {
+    file=$1
+    pattern=$2
+    message=$3
+    if grep -Eq -- "$pattern" "$file"; then
+        printf '\n--- output ---\n' >&2
+        cat "$file" >&2
+        printf '\n-------------\n' >&2
+        fail "$message"
+    fi
+}
 
-version=$("$SIZES" --version)
-[ "$version" = "sizes 0.1.0" ] || fail "--version"
-ok "--version"
+make_file() {
+    path=$1
+    bytes=$2
+    dd if=/dev/zero of="$path" bs=1 count="$bytes" status=none
+}
 
-wrapper_version=$("$SIZES_WRAPPER" --version)
-[ "$wrapper_version" = "sizes 0.1.0" ] || fail "root wrapper --version"
-ok "root wrapper"
+SAMPLE="$TEST_ROOT/sample"
+EMPTY="$TEST_ROOT/empty"
+mkdir -p "$SAMPLE/sub" "$SAMPLE/node_modules" "$SAMPLE/.git" "$EMPTY"
+make_file "$SAMPLE/video.mp4" 4096
+make_file "$SAMPLE/photo.jpg" 100
+make_file "$SAMPLE/photo.jpeg" 200
+make_file "$SAMPLE/readme.txt" 50
+make_file "$SAMPLE/LICENSE" 10
+make_file "$SAMPLE/.env" 5
+make_file "$SAMPLE/model.gguf" 3000
+make_file "$SAMPLE/data.duckdb" 2500
+make_file "$SAMPLE/archive.zip" 2048
+make_file "$SAMPLE/sub/deep.png" 1024
+make_file "$SAMPLE/node_modules/junk.mp4" 8192
+make_file "$SAMPLE/.git/object.bin" 512
 
-out=$(env SIZES_FIND=find "$SIZES" --no-color "$TEST_ROOT/sample")
-assert_contains "$out" "TXT" "non-recursive should include TXT"
-assert_contains "$out" "JPG" "non-recursive should include JPG"
-if printf '%s' "$out" | grep -F "JSON" >/dev/null; then
-    fail "non-recursive default should not include nested JSON"
+OUT="$TEST_ROOT/out.txt"
+ERR="$TEST_ROOT/err.txt"
+
+"$SIZES" --version >"$OUT"
+assert_contains "$OUT" '^sizes 0\.2\.0$' '--version prints current version'
+ok '--version'
+
+"$SIZES_WRAPPER" --version >"$OUT"
+assert_contains "$OUT" '^sizes 0\.2\.0$' 'root wrapper prints current version'
+ok 'root wrapper'
+
+env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ MP4[[:space:]]+│ video' 'top-level scan includes root MP4'
+assert_contains "$OUT" '│ JPG[[:space:]]+│ image' 'top-level scan merges JPEG into JPG by default'
+assert_contains "$OUT" '│ TXT[[:space:]]+│ doc' 'top-level scan includes TXT'
+assert_contains "$OUT" '│ NO_EXT[[:space:]]+│ none' 'top-level scan includes no-extension files'
+assert_not_contains "$OUT" '│ PNG[[:space:]]+│ image' 'top-level scan must not include nested PNG'
+ok 'non-recursive default'
+
+env NO_COLOR=1 "$SIZES" -r "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'recursive scan includes nested PNG'
+ok 'recursive scan'
+
+env NO_COLOR=1 "$SIZES" -e "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ JPEG[[:space:]]+│ image' 'exact mode keeps JPEG separate'
+assert_contains "$OUT" '│ JPG[[:space:]]+│ image' 'exact mode keeps JPG separate'
+ok 'exact mode'
+
+env NO_COLOR=1 "$SIZES" -r -n 1 "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ OTHER[[:space:]]+│ mixed' 'limit mode creates OTHER row'
+assert_contains "$OUT" '│ TOTAL[[:space:]]+│ all' 'limit mode keeps TOTAL row'
+ok 'limit mode'
+
+env NO_COLOR=1 "$SIZES" "$EMPTY" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'NO_FILES' 'empty directory reports NO_FILES'
+assert_contains "$OUT" '│ TOTAL[[:space:]]+│ all' 'empty directory still prints TOTAL'
+ok 'empty directory'
+
+"$SIZES" --no-color "$SAMPLE" >"$OUT" 2>"$ERR"
+if LC_ALL=C grep "$(printf '\033')" "$OUT" >/dev/null 2>&1; then
+    fail '--no-color output contains ANSI escapes'
 fi
-ok "non-recursive default"
+ok '--no-color'
 
-out=$("$SIZES" --no-color -r "$TEST_ROOT/sample")
-assert_contains "$out" "JSON" "recursive should include nested JSON"
-ok "recursive scan"
+env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
+if LC_ALL=C grep "$(printf '\033')" "$OUT" >/dev/null 2>&1; then
+    fail 'NO_COLOR output contains ANSI escapes'
+fi
+ok 'NO_COLOR'
 
-out=$("$SIZES" --no-color -e "$TEST_ROOT/sample")
-assert_contains "$out" "JPEG" "exact mode should keep JPEG"
-ok "exact mode"
+env CLICOLOR=0 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
+if LC_ALL=C grep "$(printf '\033')" "$OUT" >/dev/null 2>&1; then
+    fail 'CLICOLOR=0 output contains ANSI escapes'
+fi
+ok 'CLICOLOR=0'
 
-out=$("$SIZES" --no-color -r -n 2 "$TEST_ROOT/sample")
-assert_contains "$out" "OTHER" "limit mode should include OTHER"
-ok "limit mode"
+env NO_COLOR=1 "$SIZES" -r --exclude node_modules --exclude .git "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_not_contains "$OUT" '8192' 'exclude should skip node_modules files'
+assert_not_contains "$OUT" '512 B' 'exclude should skip .git files'
+assert_contains "$OUT" '│ MP4[[:space:]]+│ video' 'exclude should keep non-excluded MP4'
+ok '--exclude'
 
-out=$("$SIZES" --no-color "$TEST_ROOT/empty")
-assert_contains "$out" "NO_FILES" "empty directory should show NO_FILES"
-ok "empty directory"
+"$SIZES" -r --format tsv "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '^ext[[:space:]]+type[[:space:]]+bytes[[:space:]]+size[[:space:]]+files[[:space:]]+share_pct$' 'tsv format prints header'
+assert_contains "$OUT" '^MP4[[:space:]]+video[[:space:]]+[0-9]+' 'tsv format prints rows'
+ok '--format tsv'
 
-"$SIZES" --no-color "$TEST_ROOT/sample" > "$TEST_ROOT/no_color.txt"
-assert_not_contains_ansi "$TEST_ROOT/no_color.txt" "--no-color should produce no ANSI"
-ok "--no-color"
+"$SIZES" -r --format csv "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '^ext,type,bytes,size,files,share_pct$' 'csv format prints header'
+assert_contains "$OUT" '^"MP4","video",[0-9]+' 'csv format prints rows'
+ok '--format csv'
 
-NO_COLOR=1 "$SIZES" "$TEST_ROOT/sample" > "$TEST_ROOT/no_color_env.txt"
-assert_not_contains_ansi "$TEST_ROOT/no_color_env.txt" "NO_COLOR should produce no ANSI"
-ok "NO_COLOR"
+"$SIZES" -r --format json "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '^\[$' 'json format starts array'
+assert_contains "$OUT" '"ext":"MP4"' 'json format includes MP4 row'
+assert_contains "$OUT" '"ext":"TOTAL"' 'json format includes TOTAL row'
+ok '--format json'
 
-CLICOLOR=0 "$SIZES" "$TEST_ROOT/sample" > "$TEST_ROOT/clicolor_env.txt"
-assert_not_contains_ansi "$TEST_ROOT/clicolor_env.txt" "CLICOLOR=0 should produce no ANSI"
-ok "CLICOLOR=0"
+env NO_COLOR=1 "$SIZES" -r --group-by type "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ TYPE[[:space:]]+│[[:space:]]+SIZE' 'group-by type changes table header'
+assert_contains "$OUT" '│ video[[:space:]]+│' 'group-by type includes video'
+assert_contains "$OUT" '│ model[[:space:]]+│' 'group-by type includes model'
+assert_contains "$OUT" '│ database[[:space:]]+│' 'group-by type includes database'
+ok '--group-by type'
+
+"$SIZES" -r --plain "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '^EXT[[:space:]]+TYPE[[:space:]]+SIZE[[:space:]]+FILES[[:space:]]+SHARE[[:space:]]+BAR$' 'plain format prints ASCII header'
+assert_not_contains "$OUT" '╭|│|╰' 'plain format should not print box drawing characters'
+ok '--plain'
+
+"$SIZES" -r --sort files --format tsv "$SAMPLE" >"$OUT" 2>"$ERR"
+first_row=$(sed -n '2p' "$OUT" | cut -f1)
+if [ "$first_row" != "JPG" ] && [ "$first_row" != "MP4" ]; then
+    fail '--sort files did not put a high-count extension first'
+fi
+ok '--sort files'
 
 printf '\n%d tests passed\n' "$pass"

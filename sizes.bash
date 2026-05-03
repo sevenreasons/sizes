@@ -1,5 +1,4 @@
-# Bash wrapper for the standalone sizes command.
-# Source this file only if you prefer a shell function wrapper.
+# Bash wrapper. Install sizes.sh as ~/.local/bin/sizes first, then source this file from ~/.bashrc.
 sizes() {
     command sizes "$@"
 }

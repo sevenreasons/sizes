@@ -1,5 +1,5 @@
-# Zsh wrapper for the standalone sizes command.
-# Source this file only if you prefer a shell function wrapper.
+# Zsh wrapper. Install sizes.sh as ~/.local/bin/sizes first, then source this file from ~/.zshrc.
 sizes() {
+    emulate -L zsh
     command sizes "$@"
 }
