@@ -15,10 +15,12 @@ Register-ArgumentCompleter -Native -CommandName sizes -ScriptBlock {
         '--type' { 'video','image','audio','archive','doc','data','database','model','code','font','3d','binary','subs','meta','game','none','other' | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }; return }
         '--sort' { 'size','files','share','ext','type' | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }; return }
         '--format' { 'table','tsv','csv','json' | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }; return }
+        '--save' { return }
+        '--top-dirs' { 'mp4','jpg','png','webp','gguf','duckdb','parquet','zip','no_ext' | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }; return }
         '--group-by' { 'ext','type' | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }; return }
     }
 
-    '-r','--recursive','--depth','--follow','-x','--one-file-system','--max-files','-n','--limit','--min-size','--min-share','-e','--exact','-E','--errors','--include','--exclude','--type','--top-files','--sort','--format','--group-by','--plain','--no-progress','--no-color','--upgrade','--check','--version','-h','--help' |
+    '-r','--recursive','--depth','--follow','-x','--one-file-system','--max-files','-n','--limit','--min-size','--min-share','-e','--exact','-E','--errors','--include','--exclude','--type','--top-files','--top-dirs','--by-dir','--sort','--format','--save','--group-by','--plain','--no-progress','--no-color','--upgrade','--check','--version','-h','--help' |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterName', $_) }
 }

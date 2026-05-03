@@ -14,8 +14,11 @@ complete -c sizes -l include -d 'Include matching paths; can be repeated' -r
 complete -c sizes -l exclude -d 'Exclude matching paths; can be repeated' -r
 complete -c sizes -l type -d 'Include detected type; can be repeated' -x -a 'video image audio archive doc data database model code font 3d binary subs meta game none other'
 complete -c sizes -l top-files -d 'Show largest files for extension' -x
+complete -c sizes -l top-dirs -d 'Show directories using the most space, optionally for extension' -x
+complete -c sizes -l by-dir -d 'Summarize by immediate child directory'
 complete -c sizes -l sort -d 'Sort output' -x -a 'size files share ext type'
 complete -c sizes -l format -d 'Output format' -x -a 'table tsv csv json'
+complete -c sizes -l save -d 'Save output to file' -r
 complete -c sizes -l group-by -d 'Group rows' -x -a 'ext type'
 complete -c sizes -l plain -d 'Use simple ASCII table'
 complete -c sizes -l no-progress -d 'Disable progress animation'

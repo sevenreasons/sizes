@@ -43,6 +43,14 @@ _sizes_completion() {
             COMPREPLY=( $(compgen -W 'ext type' -- "$cur") )
             return 0
             ;;
+        --top-dirs)
+            COMPREPLY=( $(compgen -W 'mp4 jpg png webp gguf duckdb parquet zip no_ext' -- "$cur") )
+            return 0
+            ;;
+        --save)
+            COMPREPLY=( $(compgen -f -- "$cur") )
+            return 0
+            ;;
         --include|--exclude)
             compopt -o dirnames 2>/dev/null
             COMPREPLY=( $(compgen -f -- "$cur") )
@@ -51,7 +59,7 @@ _sizes_completion() {
     esac
 
     if [[ "$cur" == -* ]]; then
-        COMPREPLY=( $(compgen -W '-r --recursive --depth --follow -x --one-file-system --max-files -n --limit --min-size --min-share -e --exact -E --errors --include --exclude --type --top-files --sort --format --group-by --plain --no-progress --no-color --upgrade --check --version -h --help' -- "$cur") )
+        COMPREPLY=( $(compgen -W '-r --recursive --depth --follow -x --one-file-system --max-files -n --limit --min-size --min-share -e --exact -E --errors --include --exclude --type --top-files --top-dirs --by-dir --sort --format --save --group-by --plain --no-progress --no-color --upgrade --check --version -h --help' -- "$cur") )
         return 0
     fi
 

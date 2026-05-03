@@ -15,8 +15,11 @@ _arguments -s -S \
   '--exclude[exclude matching paths; can be repeated]:pattern:_files' \
   '--type[include detected type; can be repeated]:type:(video image audio archive doc data database model code font 3d binary subs meta game none other)' \
   '--top-files[show largest files for extension]:extension:' \
+  '--top-dirs[show directories using the most space, optionally for extension]::extension:' \
+  '--by-dir[summarize by immediate child directory]' \
   '--sort[sort output]:field:(size files share ext type)' \
   '--format[output format]:format:(table tsv csv json)' \
+  '--save[save output to file]:file:_files' \
   '--group-by[group rows]:field:(ext type)' \
   '--plain[use simple ASCII table]' \
   '--no-progress[disable progress animation]' \

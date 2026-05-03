@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.3.1"
+VERSION="0.4.0"
 
 usage() {
     cat <<'USAGE'
@@ -28,8 +28,11 @@ Options:
       --exclude PATTERN    Exclude matching paths. Can be used multiple times.
       --type TYPE          Include only files of TYPE. Can be used multiple times.
       --top-files EXT      Show largest files for an extension instead of summary rows.
+      --top-dirs [EXT]     Show directories using the most space, optionally for EXT.
+      --by-dir             Summarize usage by immediate child directory.
       --sort FIELD         Sort by size, files, share, ext, or type. Default: size.
       --format FORMAT      Output table, tsv, csv, or json. Default: table.
+      --save PATH          Save output to a file. Infers format from .json/.csv/.tsv.
       --group-by FIELD     Group by ext or type. Default: ext.
       --plain              Use a simple ASCII table.
       --no-progress        Disable progress animation.
@@ -60,8 +63,12 @@ Examples:
   sizes -r --include '*.mp4' --exclude node_modules
   sizes -r --type video
   sizes -r --top-files mp4
+  sizes -r --top-dirs
+  sizes -r --top-dirs mp4
+  sizes -r --by-dir
   sizes -r --group-by type
   sizes -r --format json
+  sizes -r --save report.json
   sizes --plain
   sizes --upgrade --check
   sizes --upgrade --version v0.3.0
@@ -228,6 +235,7 @@ color=1
 plain=0
 sort_by="size"
 format="table"
+format_seen=0
 group_by="ext"
 progress=1
 upgrade=0
@@ -242,6 +250,10 @@ max_files=0
 min_size=0
 min_share=-1
 top_files=""
+top_dirs=0
+top_dirs_ext=""
+by_dir=0
+save_path=""
 include_data=""
 include_count=0
 exclude_data=""
@@ -365,6 +377,31 @@ while [ "$#" -gt 0 ]; do
             ;;
         --top-files=*)
             top_files=${1#*=}
+            [ "$top_files" != "" ] || fail "--top-files needs an extension"
+            shift
+            ;;
+        --top-dirs)
+            top_dirs=1
+            if [ "$#" -ge 2 ]; then
+                case "$2" in
+                    -*) ;;
+                    *)
+                        if [ ! -d "$2" ]; then
+                            top_dirs_ext=$2
+                            shift
+                        fi
+                        ;;
+                esac
+            fi
+            shift
+            ;;
+        --top-dirs=*)
+            top_dirs=1
+            top_dirs_ext=${1#*=}
+            shift
+            ;;
+        --by-dir)
+            by_dir=1
             shift
             ;;
         --min-size)
@@ -399,10 +436,22 @@ while [ "$#" -gt 0 ]; do
         --format)
             [ "$#" -ge 2 ] || fail "missing value for $1"
             format=$2
+            format_seen=1
             shift 2
             ;;
         --format=*)
             format=${1#*=}
+            format_seen=1
+            shift
+            ;;
+        --save)
+            [ "$#" -ge 2 ] || fail "missing value for $1"
+            save_path=$2
+            shift 2
+            ;;
+        --save=*)
+            save_path=${1#*=}
+            [ "$save_path" != "" ] || fail "--save needs a path"
             shift
             ;;
         --group-by)
@@ -520,14 +569,35 @@ case "$group_by" in
     *) fail "--group-by must be one of: ext, type" ;;
 esac
 
+mode_count=0
+[ "$top_files" != "" ] && mode_count=$((mode_count + 1))
+[ "$top_dirs" -eq 1 ] && mode_count=$((mode_count + 1))
+[ "$by_dir" -eq 1 ] && mode_count=$((mode_count + 1))
+if [ "$mode_count" -gt 1 ]; then
+    fail "--top-files, --top-dirs, and --by-dir are mutually exclusive"
+fi
+
+if [ "$save_path" != "" ] && [ "$format_seen" -eq 0 ]; then
+    case "$save_path" in
+        *.json|*.JSON) format="json" ;;
+        *.csv|*.CSV) format="csv" ;;
+        *.tsv|*.TSV) format="tsv" ;;
+    esac
+fi
+
 if [ "$format" != "table" ]; then
     color=0
     plain=0
     progress=0
 fi
 
-if [ "$top_files" != "" ] && [ "$limit" -eq 0 ]; then
+if { [ "$top_files" != "" ] || [ "$top_dirs" -eq 1 ]; } && [ "$limit" -eq 0 ]; then
     limit=20
+fi
+
+if [ "$save_path" != "" ]; then
+    color=0
+    progress=0
 fi
 
 if [ ! -t 2 ]; then
@@ -762,13 +832,13 @@ common_awk_functions='
         n = split(name, a, ".")
         e = (n > 1 && a[n] != "") ? toupper(a[n]) : "NO_EXT"
         if (merge) {
-            if (e == "JPEG" || e == "JPE") e = "JPG"
+            if (e == "JPEG" || e == "JPE" || e == "JFIF") e = "JPG"
             else if (e == "MPEG") e = "MPG"
             else if (e == "3GPP") e = "3GP"
             else if (e == "TIF") e = "TIFF"
             else if (e == "HTM") e = "HTML"
             else if (e == "YML") e = "YAML"
-            else if (e == "SQLITE3") e = "SQLITE"
+            else if (e == "SQLITE3" || e == "DB3") e = "SQLITE"
         }
         return e
     }
@@ -776,16 +846,16 @@ common_awk_functions='
         if (ext == "NO_EXT") return "none"
         if (ext == "OTHER") return "mixed"
         if (ext == "TOTAL") return "all"
-        if (ext ~ /^(MP4|M4V|MOV|MKV|WEBM|AVI|WMV|MTS|M2TS|FLV|MPG|MPEG|3GP|3GPP|TS|Y4M|VOB|OGV)$/) return "video"
-        if (ext ~ /^(JPG|JPEG|JPE|PNG|WEBP|GIF|AVIF|JXL|BMP|PSD|TIFF|TIF|HEIC|HEIF|SVG|XCF|KRA|ICO|RAW|CR2|NEF|ARW|DNG)$/) return "image"
-        if (ext ~ /^(MP3|M4A|FLAC|WAV|OGG|OPUS|AAC|AIF|AIFF|WMA|MID|MIDI|WEM|XWB|BNK|BANK)$/) return "audio"
+        if (ext ~ /^(MP4|M4V|MOV|MKV|WEBM|AVI|WMV|MTS|M2TS|FLV|MPG|MPEG|3GP|3GPP|TS|Y4M|VOB|OGV|ASF|RM|RMVB|M2V|F4V|HEVC)$/) return "video"
+        if (ext ~ /^(JPG|JPEG|JPE|JFIF|JP2|J2K|PNG|WEBP|GIF|AVIF|JXL|BMP|PSD|TIFF|TIF|HEIC|HEIF|SVG|XCF|KRA|ICO|RAW|CR2|NEF|ARW|DNG|RW2|RAF|ORF|SR2|XMP)$/) return "image"
+        if (ext ~ /^(MP3|MP2|M4A|MKA|FLAC|WAV|OGG|OPUS|AAC|AIF|AIFF|WMA|MID|MIDI|AMR|AC3|DTS|WEM|XWB|BNK|BANK)$/) return "audio"
         if (ext ~ /^(ZIP|RAR|7Z|TAR|TGZ|GZ|XZ|ZST|BZ2|LZMA|CAB|RPM|DEB|APK|APPIMAGE|ISO|DMG|Z[0-9][0-9])$/) return "archive"
-        if (ext ~ /^(TXT|MD|RST|PDF|DOC|DOCX|ODT|RTF|XLS|XLSX|PPT|PPTX|EPUB)$/) return "doc"
-        if (ext ~ /^(JSON|JSONL|CSV|TSV|PARQUET|ARROW|FEATHER|XML|YAML|YML|TOML|INI|CONF)$/) return "data"
-        if (ext ~ /^(SQL|DB|DUCKDB|SQLITE|SQLITE3|MDB|WAL|LDB|SST)$/) return "database"
-        if (ext ~ /^(GGUF|GGML|SAFETENSORS|ONNX|PTH|PT|CKPT|PB|TFLITE|H5|ORT|MODEL|BIN)$/) return "model"
+        if (ext ~ /^(TXT|MD|RST|PDF|DJVU|DOC|DOCX|ODT|RTF|XLS|XLSX|PPT|PPTX|EPUB|CBZ|CBR)$/) return "doc"
+        if (ext ~ /^(JSON|JSONL|NDJSON|CSV|TSV|PARQUET|ARROW|FEATHER|ORC|AVRO|XML|YAML|YML|TOML|INI|CONF|NPY|NPZ|PKL|PICKLE|HDF|HDF5)$/) return "data"
+        if (ext ~ /^(SQL|DB|DB3|DUCKDB|SQLITE|SQLITE3|MDB|WAL|LDB|SST|FDB|GDB)$/) return "database"
+        if (ext ~ /^(GGUF|GGML|SAFETENSORS|ONNX|PTH|PT|CKPT|PB|TFLITE|H5|ORT|MODEL|SPM|TOKENIZER|LLAMAFILE|BIN)$/) return "model"
         if (ext ~ /^(PY|PYI|PYC|PYD|PYX|JS|MJS|CJS|TS|TSX|JSX|HTML|CSS|SCSS|SASS|RS|GO|CPP|CXX|CC|C|H|HPP|JAVA|KT|KTS|SH|BASH|ZSH|FISH|LUA|R|RB|PHP|PL|PM|SWIFT|WASM|IPYNB)$/) return "code"
-        if (ext ~ /^(TTF|OTF|TTC|WOFF|WOFF2|FON)$/) return "font"
+        if (ext ~ /^(TTF|OTF|TTC|WOFF|WOFF2|FON|EOT)$/) return "font"
         if (ext ~ /^(OBJ|FBX|GLB|GLTF|BLEND|BLEND[0-9]+|MESH|STL|PLY|DAE|3DS)$/) return "3d"
         if (ext ~ /^(EXE|DLL|SO|DYLIB|LIB|SYS|OCX|DRV|TLB|A|O|OBJ)$/) return "binary"
         if (ext ~ /^(SRT|VTT|ASS|SSA|SUB)$/) return "subs"
@@ -861,7 +931,9 @@ scan_stream \
     -v errfile="$errfile" \
     -v partial_file="$partial_file" \
     -v top_stats_file="$top_stats_file" \
-    -v start_ts="$start_ts" '
+    -v start_ts="$start_ts" \
+    -v version="$VERSION" \
+    '
     BEGIN {
         if (color) {
             reset = "\033[0m"; bold = "\033[1m"; dim = "\033[2m"
@@ -873,7 +945,7 @@ scan_stream \
         limited = limit + 0 > 0
         filtering = (min_size + 0 > 0 || min_share + 0 >= 0)
 
-        if (format == "json") print "["
+        if (format == "json") { }
         else if (format == "tsv") {
             if (group_by == "type") print "type\tbytes\tsize\tfiles\tshare_pct"
             else print "ext\ttype\tbytes\tsize\tfiles\tshare_pct"
@@ -916,8 +988,14 @@ scan_stream \
     function makebar(p, c,    filled, i, full, empty, fullc, emptyc) { filled = int((p * barw / 100) + 0.5); if (filled > barw) filled = barw; full = empty = ""; fullc = plain ? "#" : "█"; emptyc = plain ? "." : "░"; for (i = 1; i <= filled; i++) full = full fullc; for (i = filled + 1; i <= barw; i++) empty = empty emptyc; return c full reset gray empty reset }
     function count_skipped(    line, n) { n = 0; while ((getline line < errfile) > 0) n++; close(errfile); return n }
     function is_partial(    line) { if ((getline line < partial_file) > 0) { close(partial_file); return 1 } close(partial_file); return 0 }
+    function emit_json(    i, skipped, elapsed, partial) {
+        skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; partial = is_partial() ? "true" : "false"
+        printf "{\n  \"version\": %s,\n  \"root\": %s,\n  \"mode\": %s,\n  \"group_by\": %s,\n  \"elapsed_seconds\": %d,\n  \"scanned_files\": %d,\n  \"skipped_paths\": %d,\n  \"partial\": %s,\n  \"total_bytes\": %.0f,\n  \"rows\": [\n", jsonq(version), jsonq(dir), jsonq(mode), jsonq(group_by), elapsed, total_count, skipped, partial, total_bytes
+        for (i = 1; i <= json_count; i++) printf "%s%s\n", (i > 1 ? "," : ""), json_rows[i]
+        print "  ]\n}"
+    }
     function emit_summary(    skipped, elapsed, msg) { if (format != "table") return; skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; msg = "Scanned: " commas(total_count) " files · " trimhuman(human(total_bytes)) " · " elapsed "s"; if (is_partial()) msg = msg " · partial"; if (skipped > 0) msg = msg " · " skipped " skipped"; print gray msg reset }
-    function emit_machine(name, k, bytes, files, total, is_total,    share, h, prefix) { share = total ? bytes * 100 / total : 0; if (is_total && total > 0) share = 100; h = trimhuman(human(bytes)); if (format == "tsv") { if (group_by == "type") printf "%s\t%.0f\t%s\t%d\t%.2f\n", name, bytes, h, files, share; else printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", name, k, bytes, h, files, share } else if (format == "csv") { if (group_by == "type") printf "%s,%.0f,%s,%d,%.2f\n", csvq(name), bytes, csvq(h), files, share; else printf "%s,%s,%.0f,%s,%d,%.2f\n", csvq(name), csvq(k), bytes, csvq(h), files, share } else if (format == "json") { prefix = json_count ? "," : ""; if (group_by == "type") printf "%s  {\"type\":%s,\"bytes\":%.0f,\"size\":%s,\"files\":%d,\"share_pct\":%.2f}\n", prefix, jsonq(name), bytes, jsonq(h), files, share; else printf "%s  {\"ext\":%s,\"type\":%s,\"bytes\":%.0f,\"size\":%s,\"files\":%d,\"share_pct\":%.2f}\n", prefix, jsonq(name), jsonq(k), bytes, jsonq(h), files, share; json_count++ } }
+    function emit_machine(name, k, bytes, files, total, is_total,    share, h) { share = total ? bytes * 100 / total : 0; if (is_total && total > 0) share = 100; h = trimhuman(human(bytes)); if (format == "tsv") { if (group_by == "type") printf "%s\t%.0f\t%s\t%d\t%.2f\n", name, bytes, h, files, share; else printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", name, k, bytes, h, files, share } else if (format == "csv") { if (group_by == "type") printf "%s,%.0f,%s,%d,%.2f\n", csvq(name), bytes, csvq(h), files, share; else printf "%s,%s,%.0f,%s,%d,%.2f\n", csvq(name), csvq(k), bytes, csvq(h), files, share } else if (format == "json") { if (group_by == "type") json_rows[++json_count] = sprintf("    {\"type\":%s,\"bytes\":%.0f,\"size\":%s,\"files\":%d,\"share_pct\":%.2f}", jsonq(name), bytes, jsonq(h), files, share); else json_rows[++json_count] = sprintf("    {\"ext\":%s,\"type\":%s,\"bytes\":%.0f,\"size\":%s,\"files\":%d,\"share_pct\":%.2f}", jsonq(name), jsonq(k), bytes, jsonq(h), files, share) } }
     function emit_row(name, k, bytes, files, total, is_total,    share, barpct, sc, kc, label, h, c, pct, b) { if (format != "table") { emit_machine(name, k, bytes, files, total, is_total); return } share = total ? bytes * 100 / total : 0; if (is_total && total > 0) { share = 100; barpct = 100 } else { barpct = max_bytes ? bytes * 100 / max_bytes : 0 } sc = is_total ? bold white : heat_color(bytes, share); kc = is_total ? bold white : kind_color(k); label = clip(name, 12); h = human(bytes); c = commas(files); pct = pctfmt(share); b = makebar(barpct, sc); if (plain) { if (group_by == "type") printf "%-12s %14s %9s %8s %s\n", label, h, c, pct, b; else printf "%-12s %-10s %14s %9s %8s %s\n", label, k, h, c, pct, b } else if (group_by == "type") { printf "%s│%s %s%-12s%s %s│%s %s%14s%s %s│%s %9s %s│%s %8s %s│%s %s %s│%s\n", gray, reset, kc, label, reset, gray, reset, sc, h, reset, gray, reset, c, gray, reset, pct, gray, reset, b, gray, reset } else { printf "%s│%s %s%-12s%s %s│%s %s%-8s%s %s│%s %s%14s%s %s│%s %9s %s│%s %8s %s│%s %s %s│%s\n", gray, reset, kc, label, reset, gray, reset, kc, k, reset, gray, reset, sc, h, reset, gray, reset, c, gray, reset, pct, gray, reset, b, gray, reset } }
     {
         seen = 1; bytes = $2 + 0; files = $3 + 0; name = $4; k = $5; total_bytes = $6 + 0; total_count = $7 + 0; share = total_bytes ? bytes * 100 / total_bytes : 0
@@ -936,7 +1014,7 @@ scan_stream \
         if (format == "table" && !plain) print gray mid reset
         emit_row("TOTAL", "all", total_bytes, total_count, total_bytes, 1)
         if (format == "table" && !plain) print gray bottom reset
-        else if (format == "json") print "]"
+        else if (format == "json") emit_json()
         emit_summary()
     }'
 }
@@ -986,10 +1064,11 @@ scan_stream \
     -v errfile="$errfile" \
     -v partial_file="$partial_file" \
     -v top_stats_file="$top_stats_file" \
-    -v start_ts="$start_ts" '
+    -v start_ts="$start_ts"  \
+    -v version="$VERSION" '
     BEGIN {
         if (color) { reset = "\033[0m"; bold = "\033[1m"; dim = "\033[2m"; cyan = "\033[36m"; gray = "\033[90m"; white = "\033[97m" } else { reset = bold = dim = cyan = gray = white = "" }
-        if (format == "json") print "["
+        if (format == "json") { }
         else if (format == "tsv") print "bytes\tsize\text\ttype\tpath"
         else if (format == "csv") print "bytes,size,ext,type,path"
         else if (plain) { printf "sizes %s - top %s files - %s\n", dir, target_ext, mode; printf "%14s %-8s %-10s %s\n", "SIZE", "EXT", "TYPE", "PATH" }
@@ -1013,7 +1092,13 @@ scan_stream \
     function read_top_stats(    line, a) { if ((getline line < top_stats_file) > 0) { split(line, a, FS); total_bytes = a[1] + 0; total_count = a[2] + 0 } close(top_stats_file) }
     function is_partial(    line) { if ((getline line < partial_file) > 0) { close(partial_file); return 1 } close(partial_file); return 0 }
     function emit_summary(    skipped, elapsed, msg) { if (format != "table") return; read_top_stats(); skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; msg = "Scanned: " commas(total_count) " files · " trimhuman(human(total_bytes)) " · " elapsed "s"; if (is_partial()) msg = msg " · partial"; if (skipped > 0) msg = msg " · " skipped " skipped"; print gray msg reset }
-    function emit_row(bytes, path, ext, k,    h, prefix) { h = trimhuman(human(bytes)); if (format == "tsv") printf "%.0f\t%s\t%s\t%s\t%s\n", bytes, h, ext, k, path; else if (format == "csv") printf "%.0f,%s,%s,%s,%s\n", bytes, csvq(h), csvq(ext), csvq(k), csvq(path); else if (format == "json") { prefix = json_count ? "," : ""; printf "%s  {\"bytes\":%.0f,\"size\":%s,\"ext\":%s,\"type\":%s,\"path\":%s}\n", prefix, bytes, jsonq(h), jsonq(ext), jsonq(k), jsonq(path); json_count++ } else if (plain) printf "%14s %-8s %-10s %s\n", human(bytes), ext, k, path; else printf "%s│%s %s%14s%s %s│%s %-8s %s│%s %-8s %s│%s %-58s %s│%s\n", gray, reset, white, human(bytes), reset, gray, reset, ext, gray, reset, k, gray, reset, clip(path, 58), gray, reset }
+    function emit_json(    i, skipped, elapsed, partial) {
+        read_top_stats(); skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; partial = is_partial() ? "true" : "false"
+        printf "{\n  \"version\": %s,\n  \"root\": %s,\n  \"mode\": %s,\n  \"view\": \"top-files\",\n  \"target_ext\": %s,\n  \"elapsed_seconds\": %d,\n  \"scanned_files\": %d,\n  \"skipped_paths\": %d,\n  \"partial\": %s,\n  \"total_bytes\": %.0f,\n  \"rows\": [\n", jsonq(version), jsonq(dir), jsonq(mode), jsonq(target_ext), elapsed, total_count, skipped, partial, total_bytes
+        for (i = 1; i <= json_count; i++) printf "%s%s\n", (i > 1 ? "," : ""), json_rows[i]
+        print "  ]\n}"
+    }
+    function emit_row(bytes, path, ext, k,    h) { h = trimhuman(human(bytes)); if (format == "tsv") printf "%.0f\t%s\t%s\t%s\t%s\n", bytes, h, ext, k, path; else if (format == "csv") printf "%.0f,%s,%s,%s,%s\n", bytes, csvq(h), csvq(ext), csvq(k), csvq(path); else if (format == "json") { json_rows[++json_count] = sprintf("    {\"bytes\":%.0f,\"size\":%s,\"ext\":%s,\"type\":%s,\"path\":%s}", bytes, jsonq(h), jsonq(ext), jsonq(k), jsonq(path)) } else if (plain) printf "%14s %-8s %-10s %s\n", human(bytes), ext, k, path; else printf "%s│%s %s%14s%s %s│%s %-8s %s│%s %-8s %s│%s %-58s %s│%s\n", gray, reset, white, human(bytes), reset, gray, reset, ext, gray, reset, k, gray, reset, clip(path, 58), gray, reset }
     {
         seen = 1; bytes = $1 + 0; path = $2; ext = $3; k = $4
         if (shown < limit) { emit_row(bytes, path, ext, k); shown++ }
@@ -1025,7 +1110,147 @@ scan_stream \
             else printf "%s│%s %14s %s│%s %-8s %s│%s %-8s %s│%s %-58s %s│%s\n", gray, reset, "-", gray, reset, "-", gray, reset, "-", gray, reset, "No matching files", gray, reset
         }
         if (format == "table" && !plain) print gray bottom reset
-        else if (format == "json") print "]"
+        else if (format == "json") emit_json()
+        emit_summary()
+    }'
+}
+
+
+# shellcheck disable=SC2016
+generate_dirs() {
+scan_stream \
+| awk -v RS='\0' -F"$field_sep" \
+    -v merge="$merge" \
+    -v sort_by="$sort_by" \
+    -v dir="$dir" \
+    -v excludes="$exclude_data" \
+    -v includes="$include_data" \
+    -v typedata="$type_data" \
+    -v top_dirs="$top_dirs" \
+    -v top_dirs_ext="$top_dirs_ext" \
+    -v by_dir="$by_dir" \
+    -v OFS="$field_sep" \
+    "$common_awk_functions"'
+    BEGIN {
+        nex = split(excludes, ex, "\034")
+        ninc = split(includes, inc, "\034")
+        ntypes = split(typedata, types, "\034")
+        target = toupper(top_dirs_ext)
+        if (target == "NO-EXT" || target == "NO_EXT" || target == "NONE") target = "NO_EXT"
+    }
+    function parent_dir(path,    rel, d) {
+        rel = relpath(path)
+        if (rel !~ /\//) return "."
+        d = rel
+        sub(/\/[^\/]*$/, "", d)
+        return "./" d
+    }
+    function first_dir(path,    rel, a, n) {
+        rel = relpath(path)
+        n = split(rel, a, "/")
+        return (n > 1) ? "./" a[1] : "."
+    }
+    NF >= 3 {
+        size = $1 + 0; path = $2; base = $3
+        if (excluded(path, base) || !included(path, base)) next
+        ext = cached_extname(base); k = cached_kind(ext)
+        if (!allowed_type(k)) next
+        if (top_dirs && target != "" && toupper(ext) != target) next
+        key = by_dir ? first_dir(path) : parent_dir(path)
+        bytes[key] += size
+        count[key] += 1
+        ext_bytes[key SUBSEP ext] += size
+        total += size
+        total_count += 1
+    }
+    END {
+        for (combo in ext_bytes) {
+            split(combo, parts, SUBSEP)
+            key = parts[1]; ext = parts[2]
+            if (!(key in top_ext_bytes) || ext_bytes[combo] > top_ext_bytes[key]) {
+                top_ext_bytes[key] = ext_bytes[combo]
+                top_ext[key] = ext
+            }
+        }
+        for (key in bytes) {
+            share = total ? bytes[key] * 100 / total : 0
+            if (sort_by == "files") sortkey = count[key]
+            else if (sort_by == "ext" || sort_by == "type") sortkey = key
+            else if (sort_by == "share") sortkey = share
+            else sortkey = bytes[key]
+            printf "%s%s%.0f%s%d%s%s%s%s%s%.0f%s%d\n", sortkey, OFS, bytes[key], OFS, count[key], OFS, key, OFS, top_ext[key], OFS, total, OFS, total_count
+        }
+    }' \
+| sort_records \
+| awk -F"$field_sep" \
+    -v limit="$limit" \
+    -v dir="$dir" \
+    -v mode="$mode" \
+    -v color="$color" \
+    -v plain="$plain" \
+    -v format="$format" \
+    -v by_dir="$by_dir" \
+    -v top_dirs_ext="$top_dirs_ext" \
+    -v errfile="$errfile" \
+    -v partial_file="$partial_file" \
+    -v start_ts="$start_ts" \
+    -v version="$VERSION" '
+    BEGIN {
+        if (color) { reset = "\033[0m"; bold = "\033[1m"; dim = "\033[2m"; cyan = "\033[36m"; gray = "\033[90m"; white = "\033[97m" } else { reset = bold = dim = cyan = gray = white = "" }
+        limited = limit + 0 > 0
+        title = by_dir ? "by directory" : "top directories"
+        if (!by_dir && top_dirs_ext != "") title = title " for " top_dirs_ext
+        if (format == "tsv") print "dir\tbytes\tsize\tfiles\tshare_pct\ttop_ext"
+        else if (format == "csv") print "dir,bytes,size,files,share_pct,top_ext"
+        else if (format == "table" && plain) { printf "sizes %s - %s - %s\n", dir, title, mode; printf "%-30s %14s %9s %8s %-8s\n", "DIR", "SIZE", "FILES", "SHARE", "TOP_EXT" }
+        else if (format == "table") {
+            top = "╭────────────────────────────────┬────────────────┬───────────┬──────────┬──────────╮"
+            mid = "├────────────────────────────────┼────────────────┼───────────┼──────────┼──────────┤"
+            bottom = "╰────────────────────────────────┴────────────────┴───────────┴──────────┴──────────╯"
+            printf "%s%s%s %s%s — %s — %s%s\n", bold, "sizes", reset, dim, dir, title, mode, reset
+            print gray top reset
+            printf "%s│%s %s%-30s%s %s│%s %s%14s%s %s│%s %s%9s%s %s│%s %s%8s%s %s│%s %s%-8s%s %s│%s\n", gray, reset, bold cyan, "DIR", reset, gray, reset, bold cyan, "SIZE", reset, gray, reset, bold cyan, "FILES", reset, gray, reset, bold cyan, "SHARE", reset, gray, reset, bold cyan, "TOP_EXT", reset, gray, reset
+            print gray mid reset
+        }
+    }
+    function human(n,    u, units) { split("B KiB MiB GiB TiB PiB", units, " "); u = 1; while (n >= 1024 && u < 6) { n /= 1024; u++ } if (u == 1) return sprintf("%9.0f %s", n, units[u]); return sprintf("%9.2f %s", n, units[u]) }
+    function trimhuman(s) { sub(/^ +/, "", s); return s }
+    function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+    function pctfmt(p) { if (p > 0 && p < 0.01) return sprintf("%8s", "<0.01%"); return sprintf("%7.2f%%", p) }
+    function csvq(s,    t) { t = s; gsub(/"/, "\"\"", t); return "\"" t "\"" }
+    function jsonq(s,    t) { t = s; gsub(/\\/, "\\\\", t); gsub(/"/, "\\\"", t); gsub(/\t/, "\\t", t); gsub(/\r/, "\\r", t); gsub(/\n/, "\\n", t); return "\"" t "\"" }
+    function commas(n,    s, out) { s = sprintf("%d", n); out = ""; while (length(s) > 3) { out = "," substr(s, length(s) - 2) out; s = substr(s, 1, length(s) - 3) } return s out }
+    function count_skipped(    line, n) { n = 0; while ((getline line < errfile) > 0) n++; close(errfile); return n }
+    function is_partial(    line) { if ((getline line < partial_file) > 0) { close(partial_file); return 1 } close(partial_file); return 0 }
+    function emit_json(    i, skipped, elapsed, partial) {
+        skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; partial = is_partial() ? "true" : "false"
+        printf "{\n  \"version\": %s,\n  \"root\": %s,\n  \"mode\": %s,\n  \"view\": %s,\n  \"elapsed_seconds\": %d,\n  \"scanned_files\": %d,\n  \"skipped_paths\": %d,\n  \"partial\": %s,\n  \"total_bytes\": %.0f,\n  \"rows\": [\n", jsonq(version), jsonq(dir), jsonq(mode), jsonq(by_dir ? "by-dir" : "top-dirs"), elapsed, total_count, skipped, partial, total_bytes
+        for (i = 1; i <= json_count; i++) printf "%s%s\n", (i > 1 ? "," : ""), json_rows[i]
+        print "  ]\n}"
+    }
+    function emit_summary(    skipped, elapsed, msg) { if (format != "table") return; skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; msg = "Scanned: " commas(total_count) " files · " trimhuman(human(total_bytes)) " · " elapsed "s"; if (is_partial()) msg = msg " · partial"; if (skipped > 0) msg = msg " · " skipped " skipped"; print gray msg reset }
+    function emit_row(path, bytes, files, top_ext, total, is_total,    share, h, pct) {
+        share = total ? bytes * 100 / total : 0; if (is_total && total > 0) share = 100; h = trimhuman(human(bytes)); pct = pctfmt(share)
+        if (format == "tsv") printf "%s\t%.0f\t%s\t%d\t%.2f\t%s\n", path, bytes, h, files, share, top_ext
+        else if (format == "csv") printf "%s,%.0f,%s,%d,%.2f,%s\n", csvq(path), bytes, csvq(h), files, share, csvq(top_ext)
+        else if (format == "json") { json_rows[++json_count] = sprintf("    {\"dir\":%s,\"bytes\":%.0f,\"size\":%s,\"files\":%d,\"share_pct\":%.2f,\"top_ext\":%s}", jsonq(path), bytes, jsonq(h), files, share, jsonq(top_ext)) }
+        else if (plain) printf "%-30s %14s %9s %8s %-8s\n", clip(path, 30), human(bytes), commas(files), pct, top_ext
+        else printf "%s│%s %s%-30s%s %s│%s %s%14s%s %s│%s %9s %s│%s %8s %s│%s %-8s %s│%s\n", gray, reset, white, clip(path, 30), reset, gray, reset, white, human(bytes), reset, gray, reset, commas(files), gray, reset, pct, gray, reset, top_ext, gray, reset
+    }
+    {
+        seen = 1; bytes = $2 + 0; files = $3 + 0; path = $4; top_ext = $5; total_bytes = $6 + 0; total_count = $7 + 0
+        if (!limited || shown < limit) { emit_row(path, bytes, files, top_ext, total_bytes, 0); shown++ } else { other_bytes += bytes; other_count += files; other_types++ }
+    }
+    END {
+        if (!seen && format == "table") {
+            total_bytes = 0; total_count = 0
+            if (plain) printf "%-30s %14s %9s %8s %-8s\n", "NO_FILES", "-", "-", "-", "-"
+            else printf "%s│%s %-30s %s│%s %14s %s│%s %9s %s│%s %8s %s│%s %-8s %s│%s\n", gray, reset, "NO_FILES", gray, reset, "-", gray, reset, "-", gray, reset, "-", gray, reset, "-", gray, reset
+        } else if (other_types > 0) { if (format == "table" && !plain) print gray mid reset; emit_row("OTHER", other_bytes, other_count, "mixed", total_bytes, 0) }
+        if (format == "table" && !plain) print gray mid reset
+        emit_row("TOTAL", total_bytes, total_count, "all", total_bytes, 1)
+        if (format == "table" && !plain) print gray bottom reset
+        else if (format == "json") emit_json()
         emit_summary()
     }'
 }
@@ -1054,6 +1279,8 @@ generate() {
 
     if [ "$top_files" != "" ]; then
         generate_top_files
+    elif [ "$top_dirs" -eq 1 ] || [ "$by_dir" -eq 1 ]; then
+        generate_dirs
     else
         generate_report
     fi
@@ -1106,7 +1333,9 @@ run_with_progress() {
     return "$progress_status"
 }
 
-if [ "$progress" -eq 1 ]; then
+if [ "$save_path" != "" ]; then
+    generate >"$save_path"
+elif [ "$progress" -eq 1 ]; then
     run_with_progress
 else
     generate

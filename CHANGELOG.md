@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0
+
+- Add `--top-dirs [EXT]` to show directories using the most space, optionally filtered by extension.
+- Add `--by-dir` for immediate child-directory summaries.
+- Improve JSON output with scan metadata and a structured `rows` array.
+- Add `--save PATH` with format inference for `.json`, `.csv`, and `.tsv`.
+- Expand extension type detection for media, documents, data, databases, models, fonts, and archives.
+- Update completions and tests.
+
 ## 0.3.1
 
 - Push `--include` filters into the `find` scan where possible.

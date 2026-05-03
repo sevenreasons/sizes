@@ -70,11 +70,11 @@ OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.3\.1$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.4\.0$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.3\.1$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.4\.0$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -125,10 +125,10 @@ ok 'CLICOLOR=0'
 UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
 UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
 cp "$SIZES" "$UPGRADE_TARGET"
-sed 's/VERSION="0.3.1"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+sed 's/VERSION="0.4.0"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
 chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes: upgraded .+ from 0\.3\.1 to 9\.9\.9' '--upgrade reports old and new version'
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.4\.0 to 9\.9\.9' '--upgrade reports old and new version'
 "$UPGRADE_TARGET" --version >"$OUT"
 assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
 ok '--upgrade'
@@ -151,7 +151,8 @@ assert_contains "$OUT" '^"MP4","video",[0-9]+' 'csv format prints rows'
 ok '--format csv'
 
 "$SIZES" -r --format json "$SAMPLE" >"$OUT" 2>"$ERR"
-assert_contains "$OUT" '^\[$' 'json format starts array'
+assert_contains "$OUT" '^\{' 'json format starts object'
+assert_contains "$OUT" '"rows": \[' 'json format includes rows array'
 assert_contains "$OUT" '"ext":"MP4"' 'json format includes MP4 row'
 assert_contains "$OUT" '"ext":"TOTAL"' 'json format includes TOTAL row'
 ok '--format json'
@@ -212,14 +213,14 @@ assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'follow keeps normal recur
 ok '--follow'
 
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" "$SIZES" --upgrade --check >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'current 0\.3\.1, available 9\.9\.9' 'upgrade check reports available version'
+assert_contains "$OUT" 'current 0\.4\.0, available 9\.9\.9' 'upgrade check reports available version'
 ok '--upgrade --check'
 
 UPGRADE_TARGET_VERSIONED="$TEST_ROOT/upgradable-versioned-sizes"
 cp "$SIZES" "$UPGRADE_TARGET_VERSIONED"
 chmod +x "$UPGRADE_TARGET_VERSIONED"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET_VERSIONED" "$UPGRADE_TARGET_VERSIONED" --upgrade --version v9.9.9 >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'from 0\.3\.1 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
+assert_contains "$OUT" 'from 0\.4\.0 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
 ok '--upgrade --version'
 
 
@@ -240,5 +241,27 @@ SIZES_DEBUG_TIMING=1 "$SIZES" -r --format tsv "$SAMPLE" >"$OUT" 2>"$ERR"
 assert_contains "$ERR" 'sizes: timing total=[0-9]+s' 'debug timing writes total timing to stderr'
 ok 'SIZES_DEBUG_TIMING'
 
+
+
+env NO_COLOR=1 "$SIZES" -r --top-dirs "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'top directories' 'top-dirs prints heading'
+assert_contains "$OUT" '\./sub' 'top-dirs includes nested parent directory'
+ok '--top-dirs'
+
+env NO_COLOR=1 "$SIZES" -r --top-dirs mp4 "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'top directories for mp4' 'top-dirs extension filter prints heading'
+assert_contains "$OUT" 'MP4' 'top-dirs extension filter keeps MP4 files'
+ok '--top-dirs EXT'
+
+env NO_COLOR=1 "$SIZES" -r --by-dir "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'by directory' 'by-dir prints heading'
+assert_contains "$OUT" '\./sub' 'by-dir includes immediate child directory'
+ok '--by-dir'
+
+SAVE_JSON="$TEST_ROOT/report.json"
+"$SIZES" -r --save "$SAVE_JSON" "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$SAVE_JSON" '^\{' 'save infers json format from extension'
+assert_contains "$SAVE_JSON" '"rows": \[' 'saved json includes rows'
+ok '--save'
 
 printf '\n%d tests passed\n' "$pass"

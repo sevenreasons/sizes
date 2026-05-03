@@ -60,9 +60,13 @@ sizes -r --include '*.mp4'         # include matching paths only
 sizes -r --exclude .git            # skip paths
 sizes -r --type video              # include one detected type
 sizes -r --top-files mp4           # largest files for extension
+sizes -r --top-dirs                # directories using the most space
+sizes -r --top-dirs mp4            # directories using the most MP4 space
+sizes -r --by-dir                  # summarize by immediate child directory
 sizes -r --sort files              # sort by file count
 sizes -r --group-by type           # summarize by type instead of extension
 sizes -r --format json             # table, tsv, csv, json
+sizes -r --save report.json        # save output; infers json/csv/tsv by extension
 sizes --plain                      # simple ASCII table
 sizes --no-progress                # disable scan spinner
 sizes --upgrade --check            # check available upgrade
@@ -88,8 +92,11 @@ sizes --no-color                   # no ANSI colors
     --exclude PATTERN    exclude matching paths; can be used multiple times
     --type TYPE          include only files of TYPE; can be used multiple times
     --top-files EXT      show largest files for an extension
+    --top-dirs [EXT]     show directories using the most space, optionally for EXT
+    --by-dir             summarize by immediate child directory
     --sort FIELD         size, files, share, ext, type
     --format FORMAT      table, tsv, csv, json
+    --save PATH          write output to PATH; infers format from .json/.csv/.tsv
     --group-by FIELD     ext, type
     --plain              simple ASCII table
     --no-progress        disable progress animation
@@ -111,6 +118,9 @@ sizes --no-color                   # no ANSI colors
 - Uses faster internal sorting with `LC_ALL=C` and robust unit-separator records for paths containing tabs.
 - `--include` filters are pushed into `find` where possible, reducing work on large trees.
 - `--top-files` streams candidates through `sort` instead of storing all matches in memory.
+- `--top-dirs` and `--by-dir` help locate where space is coming from.
+- JSON output includes metadata such as version, root, mode, elapsed time, skipped paths, partial status, totals, and rows.
+- `--save` writes the selected output directly to a file and infers JSON/CSV/TSV from the filename.
 - Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, and `SIZES_UPGRADE_URL=...`.
 
 ## Completions

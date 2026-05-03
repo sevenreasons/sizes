@@ -16,8 +16,11 @@ export extern sizes [
     --exclude: string        # Exclude matching paths; can be repeated
     --type: string           # Include detected type; can be repeated
     --top-files: string      # Show largest files for extension
+    --top-dirs: string       # Show directories using the most space, optionally for extension
+    --by-dir                 # Summarize by immediate child directory
     --sort: string           # Sort by size, files, share, ext, or type
     --format: string         # Output table, tsv, csv, or json
+    --save: path             # Save output to file
     --group-by: string       # Group by ext or type
     --plain                  # Use simple ASCII table
     --no-progress            # Disable progress animation
