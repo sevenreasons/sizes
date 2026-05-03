@@ -11,6 +11,22 @@ _sizes_completion() {
             COMPREPLY=( $(compgen -W '10 20 25 40 50 100' -- "$cur") )
             return 0
             ;;
+        --depth)
+            COMPREPLY=( $(compgen -W '0 1 2 3 4 5' -- "$cur") )
+            return 0
+            ;;
+        --min-size)
+            COMPREPLY=( $(compgen -W '1M 10M 100M 1G 10G' -- "$cur") )
+            return 0
+            ;;
+        --min-share)
+            COMPREPLY=( $(compgen -W '0.01 0.1 1 5' -- "$cur") )
+            return 0
+            ;;
+        --type)
+            COMPREPLY=( $(compgen -W 'video image audio archive doc data database model code font 3d binary subs meta game none other' -- "$cur") )
+            return 0
+            ;;
         --sort)
             COMPREPLY=( $(compgen -W 'size files share ext type' -- "$cur") )
             return 0
@@ -23,7 +39,7 @@ _sizes_completion() {
             COMPREPLY=( $(compgen -W 'ext type' -- "$cur") )
             return 0
             ;;
-        --exclude)
+        --include|--exclude)
             compopt -o dirnames 2>/dev/null
             COMPREPLY=( $(compgen -f -- "$cur") )
             return 0
@@ -31,7 +47,7 @@ _sizes_completion() {
     esac
 
     if [[ "$cur" == -* ]]; then
-        COMPREPLY=( $(compgen -W '-r --recursive -n --limit -e --exact -E --errors --exclude --sort --format --group-by --plain --no-progress --no-color --upgrade --version -h --help' -- "$cur") )
+        COMPREPLY=( $(compgen -W '-r --recursive --depth --follow -n --limit --min-size --min-share -e --exact -E --errors --include --exclude --type --top-files --sort --format --group-by --plain --no-progress --no-color --upgrade --check --version -h --help' -- "$cur") )
         return 0
     fi
 

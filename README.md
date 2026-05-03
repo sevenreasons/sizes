@@ -39,35 +39,51 @@ sizes ~/Downloads — recursive
 ├──────────────┼──────────┼────────────────┼───────────┼──────────┼────────────────────┤
 │ TOTAL        │ all      │      15.75 GiB │       200 │  100.00% │ ██████████████████ │
 ╰──────────────┴──────────┴────────────────┴───────────┴──────────┴────────────────────╯
+Scanned: 200 files · 15.75 GiB · 1s
 ```
 
 ## Usage
 
 ```sh
-sizes                         # current directory only
-sizes -r                      # recursive
-sizes DIR                     # chosen directory
-sizes DIR -r                  # chosen directory, recursive
-sizes -r -n 50                # top 50 + OTHER
-sizes -r --exclude .git       # skip paths
-sizes -r --exclude node_modules --exclude .venv
-sizes -r --sort files         # sort by file count
-sizes -r --group-by type      # summarize by type instead of extension
-sizes -r --format json        # table, tsv, csv, json
-sizes --plain                 # simple ASCII table
-sizes --no-progress           # disable scan spinner
-sizes --upgrade               # self-upgrade installed script
-sizes --no-color              # no ANSI colors
+sizes                              # current directory only
+sizes -r                           # recursive
+sizes DIR                          # chosen directory
+sizes DIR -r                       # chosen directory, recursive
+sizes -r --depth 2                 # recurse up to 2 levels
+sizes -r --follow                  # follow symlinks
+sizes -r -n 50                     # top 50 + OTHER
+sizes -r --min-size 100M           # fold smaller rows into OTHER
+sizes -r --min-share 0.1           # fold rows below 0.1% into OTHER
+sizes -r --include '*.mp4'         # include matching paths only
+sizes -r --exclude .git            # skip paths
+sizes -r --type video              # include one detected type
+sizes -r --top-files mp4           # largest files for extension
+sizes -r --sort files              # sort by file count
+sizes -r --group-by type           # summarize by type instead of extension
+sizes -r --format json             # table, tsv, csv, json
+sizes --plain                      # simple ASCII table
+sizes --no-progress                # disable scan spinner
+sizes --upgrade --check            # check available upgrade
+sizes --upgrade                    # self-upgrade installed script
+sizes --upgrade --version v0.3.0   # install a tagged version
+sizes --no-color                   # no ANSI colors
 ```
 
 ## Options
 
 ```text
 -r, --recursive          recursive scan
+    --depth N            recurse up to N directory levels; overrides -r
+    --follow             follow symlinks while scanning
 -n, --limit N            show top N rows and group the rest as OTHER
+    --min-size SIZE      fold rows smaller than SIZE into OTHER
+    --min-share PCT      fold rows below PCT percent into OTHER
 -e, --exact              do not merge extension aliases like JPEG -> JPG
 -E, --errors             show unreadable paths after the table
+    --include PATTERN    include matching paths; can be used multiple times
     --exclude PATTERN    exclude matching paths; can be used multiple times
+    --type TYPE          include only files of TYPE; can be used multiple times
+    --top-files EXT      show largest files for an extension
     --sort FIELD         size, files, share, ext, type
     --format FORMAT      table, tsv, csv, json
     --group-by FIELD     ext, type
@@ -75,17 +91,19 @@ sizes --no-color              # no ANSI colors
     --no-progress        disable progress animation
     --no-color           disable ANSI colors
     --upgrade            upgrade the installed script
-    --version            show version
+    --check              with --upgrade, check without installing
+    --version [VERSION]  show version; with --upgrade, install tagged version
 ```
 
 ## Output behavior
 
 - Non-recursive by default.
-- Shows all rows unless `--limit` is used.
+- Shows all rows unless `--limit`, `--min-size`, or `--min-share` folds rows into `OTHER`.
 - Sorts by total size unless `--sort` is used.
 - Groups extension aliases by default, for example `JPEG` into `JPG`.
 - Colors are disabled automatically when output is redirected.
 - Shows a progress spinner on interactive scans and only prints the table after scanning is done.
+- Table output ends with a compact scan summary.
 - Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, and `SIZES_UPGRADE_URL=...`.
 
 ## Completions

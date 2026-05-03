@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0
+
+- Add `--min-size` and `--min-share` filters.
+- Add repeatable `--include` path filtering.
+- Add repeatable `--type` filtering for detected file categories.
+- Add `--top-files EXT` to show largest files for an extension.
+- Add `--depth N` for limited recursive scans.
+- Add `--follow` for following symlinks.
+- Add scan summary footer with file count, total size, skipped paths, and elapsed time.
+- Improve `--upgrade` with `--check` and tagged version selection.
+- Update completions and tests.
+
 ## 0.2.1
 
 - Add `--upgrade` for self-updating the installed script.

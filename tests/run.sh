@@ -69,11 +69,11 @@ OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.2\.1$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.3\.0$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.2\.1$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.3\.0$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -124,10 +124,10 @@ ok 'CLICOLOR=0'
 UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
 UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
 cp "$SIZES" "$UPGRADE_TARGET"
-sed 's/VERSION="0.2.1"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+sed 's/VERSION="0.3.0"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
 chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes: upgraded .+ from 0\.2\.1 to 9\.9\.9' '--upgrade reports old and new version'
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.3\.0 to 9\.9\.9' '--upgrade reports old and new version'
 "$UPGRADE_TARGET" --version >"$OUT"
 assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
 ok '--upgrade'
@@ -173,5 +173,53 @@ if [ "$first_row" != "JPG" ] && [ "$first_row" != "MP4" ]; then
     fail '--sort files did not put a high-count extension first'
 fi
 ok '--sort files'
+
+
+env NO_COLOR=1 "$SIZES" -r --min-size 3K "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ MP4[[:space:]]+│ video' 'min-size keeps large MP4 row'
+assert_contains "$OUT" '│ OTHER[[:space:]]+│ mixed' 'min-size folds small rows into OTHER'
+ok '--min-size'
+
+env NO_COLOR=1 "$SIZES" -r --min-share 20 "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ OTHER[[:space:]]+│ mixed' 'min-share folds small-share rows into OTHER'
+ok '--min-share'
+
+env NO_COLOR=1 "$SIZES" -r --include '*.mp4' "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ MP4[[:space:]]+│ video' 'include keeps matching MP4 rows'
+assert_not_contains "$OUT" '│ JPG[[:space:]]+│ image' 'include hides non-matching JPG rows'
+ok '--include'
+
+env NO_COLOR=1 "$SIZES" -r --type video "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ MP4[[:space:]]+│ video' 'type filter keeps video rows'
+assert_not_contains "$OUT" '│ JPG[[:space:]]+│ image' 'type filter hides image rows'
+ok '--type'
+
+env NO_COLOR=1 "$SIZES" -r --top-files mp4 -n 1 "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'top mp4 files' 'top-files prints top-files heading'
+assert_contains "$OUT" 'junk\.mp4|video\.mp4' 'top-files includes MP4 path'
+ok '--top-files'
+
+env NO_COLOR=1 "$SIZES" --depth 1 "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_not_contains "$OUT" '│ PNG[[:space:]]+│ image' 'depth 1 excludes nested PNG'
+env NO_COLOR=1 "$SIZES" --depth 2 "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'depth 2 includes nested PNG'
+ok '--depth'
+
+ln -s "$SAMPLE/sub" "$SAMPLE/linksub"
+env NO_COLOR=1 "$SIZES" -r --follow "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'follow keeps normal recursive results'
+ok '--follow'
+
+env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" "$SIZES" --upgrade --check >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'current 0\.3\.0, available 9\.9\.9' 'upgrade check reports available version'
+ok '--upgrade --check'
+
+UPGRADE_TARGET_VERSIONED="$TEST_ROOT/upgradable-versioned-sizes"
+cp "$SIZES" "$UPGRADE_TARGET_VERSIONED"
+chmod +x "$UPGRADE_TARGET_VERSIONED"
+env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET_VERSIONED" "$UPGRADE_TARGET_VERSIONED" --upgrade --version v9.9.9 >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'from 0\.3\.0 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
+ok '--upgrade --version'
+
 
 printf '\n%d tests passed\n' "$pass"
