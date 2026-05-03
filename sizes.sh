@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.3.0"
+VERSION="0.3.1"
 
 usage() {
     cat <<'USAGE'
@@ -16,6 +16,8 @@ Options:
   -r, --recursive          Scan recursively. Default: current directory only.
       --depth N            Scan up to N directory levels. Overrides -r.
       --follow             Follow symlinks while scanning.
+  -x, --one-file-system    Do not cross filesystem boundaries.
+      --max-files N        Stop after scanning N files and show a partial result.
   -n, --limit N            Show top N rows and fold the rest into OTHER.
                            Default: show all rows. With --top-files, default: 20.
       --min-size SIZE      Fold rows smaller than SIZE into OTHER. Examples: 100M, 1G.
@@ -44,12 +46,15 @@ Environment:
   SIZES_FIND=/path/to/find Override find command.
   SIZES_UPGRADE_URL=URL    Override --upgrade download source.
   SIZES_UPGRADE_TARGET=PATH Override --upgrade target path.
+  SIZES_DEBUG_TIMING=1  Print coarse timing diagnostics to stderr.
 
 Examples:
   sizes
   sizes -r
   sizes ~/Downloads -r
   sizes -r --depth 2
+  sizes -r -x
+  sizes -r --max-files 100000
   sizes -r -n 40
   sizes -r --min-size 100M --min-share 0.1
   sizes -r --include '*.mp4' --exclude node_modules
@@ -231,7 +236,9 @@ upgrade_version=""
 dir="."
 dir_seen=0
 follow=0
+one_file_system=0
 depth=""
+max_files=0
 min_size=0
 min_share=-1
 top_files=""
@@ -299,6 +306,21 @@ while [ "$#" -gt 0 ]; do
             ;;
         --follow)
             follow=1
+            shift
+            ;;
+        -x|--one-file-system)
+            one_file_system=1
+            shift
+            ;;
+        --max-files)
+            [ "$#" -ge 2 ] || fail "missing value for $1"
+            max_files=$2
+            case "$max_files" in ''|*[!0-9]*) fail "--max-files must be a non-negative integer" ;; esac
+            shift 2
+            ;;
+        --max-files=*)
+            max_files=${1#*=}
+            case "$max_files" in ''|*[!0-9]*) fail "--max-files must be a non-negative integer" ;; esac
             shift
             ;;
         -e|--exact)
@@ -542,16 +564,35 @@ fi
 if [ "$follow" -eq 1 ]; then
     mode="$mode, follow"
 fi
+if [ "$one_file_system" -eq 1 ]; then
+    mode="$mode, one filesystem"
+fi
 
 errfile=$(mktemp "${TMPDIR:-/tmp}/sizes-errors.XXXXXX") || exit 1
 exclude_file=$(mktemp "${TMPDIR:-/tmp}/sizes-exclude.XXXXXX") || exit 1
-trap 'rm -f "$errfile" "$exclude_file"' EXIT HUP INT TERM
+include_file=$(mktemp "${TMPDIR:-/tmp}/sizes-include.XXXXXX") || exit 1
+partial_file=$(mktemp "${TMPDIR:-/tmp}/sizes-partial.XXXXXX") || exit 1
+top_stats_file=$(mktemp "${TMPDIR:-/tmp}/sizes-top-stats.XXXXXX") || exit 1
+progress_count_file=""
+cleanup() {
+    rm -f "$errfile" "$exclude_file" "$include_file" "$partial_file" "$top_stats_file"
+    if [ "$progress_count_file" != "" ]; then
+        rm -f "$progress_count_file"
+    fi
+}
+trap cleanup EXIT HUP INT TERM
 
 if [ "$exclude_data" != "" ]; then
     awk -v excludes="$exclude_data" 'BEGIN { n = split(excludes, ex, "\034"); for (i = 1; i <= n; i++) if (ex[i] != "") print ex[i] }' >"$exclude_file"
 fi
 
+if [ "$include_data" != "" ]; then
+    awk -v includes="$include_data" 'BEGIN { n = split(includes, inc, "\034"); for (i = 1; i <= n; i++) if (inc[i] != "") print inc[i] }' >"$include_file"
+fi
+
 start_ts=$(date +%s 2>/dev/null || printf '0')
+field_sep=$(printf '\037')
+find_printf="%s${field_sep}%p${field_sep}%f\\0"
 
 run_find() {
     set --
@@ -561,6 +602,10 @@ run_find() {
     fi
 
     set -- "$@" "$dir"
+
+    if [ "$one_file_system" -eq 1 ]; then
+        set -- "$@" -xdev
+    fi
 
     if [ "$depth" != "" ]; then
         set -- "$@" -maxdepth "$depth"
@@ -579,26 +624,75 @@ run_find() {
             fi
 
             case "$pattern" in
-                */*) set -- "$@" -path "$pattern" -o -path "*/$pattern" ;;
+                */*) set -- "$@" "(" -path "$pattern" -o -path "*/$pattern" ")" ;;
                 *) set -- "$@" -name "$pattern" ;;
             esac
 
             first=0
         done <"$exclude_file"
-        set -- "$@" ")" -prune -o -type f -printf '%s\t%p\t%f\0'
+        set -- "$@" ")" -prune -o -type f
     else
-        set -- "$@" -type f -printf '%s\t%p\t%f\0'
+        set -- "$@" -type f
     fi
 
+    if [ "$include_count" -gt 0 ]; then
+        set -- "$@" "("
+        first=1
+        while IFS= read -r pattern; do
+            [ "$pattern" != "" ] || continue
+
+            if [ "$first" -eq 0 ]; then
+                set -- "$@" -o
+            fi
+
+            case "$pattern" in
+                */*) set -- "$@" "(" -path "$pattern" -o -path "*/$pattern" ")" ;;
+                *) set -- "$@" -name "$pattern" ;;
+            esac
+
+            first=0
+        done <"$include_file"
+        set -- "$@" ")"
+    fi
+
+    set -- "$@" -printf "$find_printf"
     command "$find_cmd" "$@" 2>"$errfile"
 }
 
-tab=$(printf '\t')
+scan_stream() {
+    run_find \
+    | LC_ALL=C awk -v RS='\0' -v ORS='\0' \
+        -v max_files="$max_files" \
+        -v progress_file="$progress_count_file" \
+        -v partial_file="$partial_file" '
+        NF > 0 {
+            seen++
+            if (max_files + 0 > 0 && seen > max_files) {
+                printf "%d\n", max_files > partial_file
+                close(partial_file)
+                exit
+            }
+
+            print $0
+
+            if (progress_file != "" && seen % 256 == 0) {
+                printf "%d\n", seen > progress_file
+                close(progress_file)
+            }
+        }
+        END {
+            if (progress_file != "") {
+                printf "%d\n", seen > progress_file
+                close(progress_file)
+            }
+        }'
+}
+
 
 sort_records() {
     case "$sort_by" in
-        size|share|files) sort -t "$tab" -k1,1nr ;;
-        ext|type) sort -t "$tab" -k1,1f ;;
+        size|share|files) LC_ALL=C sort -t "$field_sep" -k1,1nr ;;
+        ext|type) LC_ALL=C sort -t "$field_sep" -k1,1f ;;
     esac
 }
 
@@ -698,12 +792,20 @@ common_awk_functions='
         if (ext ~ /^(LOG|MAP|LOCK|BAK|BACKUP|OLD|TMP|CACHE|PART|CRDOWNLOAD)$/) return "meta"
         if (ext ~ /^(PAK|RESS|RESOURCE|ASSETS|BUNDLE|LOTPACK|LOTHEADER|UNITY3D|DAT|ARC|WAD|PK3|PK4)$/) return "game"
         return "other"
+    }
+    function cached_extname(name) {
+        if (!(name in ext_cache)) ext_cache[name] = extname(name)
+        return ext_cache[name]
+    }
+    function cached_kind(ext) {
+        if (!(ext in kind_cache)) kind_cache[ext] = kind(ext)
+        return kind_cache[ext]
     }'
 
 # shellcheck disable=SC2016
 generate_report() {
-run_find \
-| awk -v RS='\0' -F'\t' \
+scan_stream \
+| awk -v RS='\0' -F"$field_sep" \
     -v merge="$merge" \
     -v group_by="$group_by" \
     -v sort_by="$sort_by" \
@@ -711,6 +813,7 @@ run_find \
     -v excludes="$exclude_data" \
     -v includes="$include_data" \
     -v typedata="$type_data" \
+    -v OFS="$field_sep" \
     "$common_awk_functions"'
     BEGIN {
         nex = split(excludes, ex, "\034")
@@ -722,8 +825,8 @@ run_find \
         path = $2
         base = $3
         if (excluded(path, base) || !included(path, base)) next
-        ext = extname(base)
-        k = kind(ext)
+        ext = cached_extname(base)
+        k = cached_kind(ext)
         if (!allowed_type(k)) next
         key = (group_by == "type") ? k : ext
         bytes[key] += size
@@ -741,11 +844,11 @@ run_find \
             else if (sort_by == "type") sortkey = k " " key
             else if (sort_by == "share") sortkey = share
             else sortkey = bytes[key]
-            printf "%s\t%.0f\t%d\t%s\t%s\t%.0f\t%d\n", sortkey, bytes[key], count[key], key, k, total, total_count
+            printf "%s%s%.0f%s%d%s%s%s%s%s%.0f%s%d\n", sortkey, OFS, bytes[key], OFS, count[key], OFS, key, OFS, k, OFS, total, OFS, total_count
         }
     }' \
 | sort_records \
-| awk -F'\t' \
+| awk -F"$field_sep" \
     -v limit="$limit" \
     -v dir="$dir" \
     -v mode="$mode" \
@@ -756,6 +859,8 @@ run_find \
     -v min_size="$min_size" \
     -v min_share="$min_share" \
     -v errfile="$errfile" \
+    -v partial_file="$partial_file" \
+    -v top_stats_file="$top_stats_file" \
     -v start_ts="$start_ts" '
     BEGIN {
         if (color) {
@@ -810,7 +915,8 @@ run_find \
     function heat_color(bytes, p) { if (bytes >= 10 * 1024 * 1024 * 1024 || p >= 20) return red; if (bytes >= 1024 * 1024 * 1024 || p >= 5) return yellow; if (bytes >= 100 * 1024 * 1024 || p >= 1) return green; if (bytes > 0) return gray; return gray }
     function makebar(p, c,    filled, i, full, empty, fullc, emptyc) { filled = int((p * barw / 100) + 0.5); if (filled > barw) filled = barw; full = empty = ""; fullc = plain ? "#" : "█"; emptyc = plain ? "." : "░"; for (i = 1; i <= filled; i++) full = full fullc; for (i = filled + 1; i <= barw; i++) empty = empty emptyc; return c full reset gray empty reset }
     function count_skipped(    line, n) { n = 0; while ((getline line < errfile) > 0) n++; close(errfile); return n }
-    function emit_summary(    skipped, elapsed, msg) { if (format != "table") return; skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; msg = "Scanned: " commas(total_count) " files · " trimhuman(human(total_bytes)) " · " elapsed "s"; if (skipped > 0) msg = msg " · " skipped " skipped"; print gray msg reset }
+    function is_partial(    line) { if ((getline line < partial_file) > 0) { close(partial_file); return 1 } close(partial_file); return 0 }
+    function emit_summary(    skipped, elapsed, msg) { if (format != "table") return; skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; msg = "Scanned: " commas(total_count) " files · " trimhuman(human(total_bytes)) " · " elapsed "s"; if (is_partial()) msg = msg " · partial"; if (skipped > 0) msg = msg " · " skipped " skipped"; print gray msg reset }
     function emit_machine(name, k, bytes, files, total, is_total,    share, h, prefix) { share = total ? bytes * 100 / total : 0; if (is_total && total > 0) share = 100; h = trimhuman(human(bytes)); if (format == "tsv") { if (group_by == "type") printf "%s\t%.0f\t%s\t%d\t%.2f\n", name, bytes, h, files, share; else printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", name, k, bytes, h, files, share } else if (format == "csv") { if (group_by == "type") printf "%s,%.0f,%s,%d,%.2f\n", csvq(name), bytes, csvq(h), files, share; else printf "%s,%s,%.0f,%s,%d,%.2f\n", csvq(name), csvq(k), bytes, csvq(h), files, share } else if (format == "json") { prefix = json_count ? "," : ""; if (group_by == "type") printf "%s  {\"type\":%s,\"bytes\":%.0f,\"size\":%s,\"files\":%d,\"share_pct\":%.2f}\n", prefix, jsonq(name), bytes, jsonq(h), files, share; else printf "%s  {\"ext\":%s,\"type\":%s,\"bytes\":%.0f,\"size\":%s,\"files\":%d,\"share_pct\":%.2f}\n", prefix, jsonq(name), jsonq(k), bytes, jsonq(h), files, share; json_count++ } }
     function emit_row(name, k, bytes, files, total, is_total,    share, barpct, sc, kc, label, h, c, pct, b) { if (format != "table") { emit_machine(name, k, bytes, files, total, is_total); return } share = total ? bytes * 100 / total : 0; if (is_total && total > 0) { share = 100; barpct = 100 } else { barpct = max_bytes ? bytes * 100 / max_bytes : 0 } sc = is_total ? bold white : heat_color(bytes, share); kc = is_total ? bold white : kind_color(k); label = clip(name, 12); h = human(bytes); c = commas(files); pct = pctfmt(share); b = makebar(barpct, sc); if (plain) { if (group_by == "type") printf "%-12s %14s %9s %8s %s\n", label, h, c, pct, b; else printf "%-12s %-10s %14s %9s %8s %s\n", label, k, h, c, pct, b } else if (group_by == "type") { printf "%s│%s %s%-12s%s %s│%s %s%14s%s %s│%s %9s %s│%s %8s %s│%s %s %s│%s\n", gray, reset, kc, label, reset, gray, reset, sc, h, reset, gray, reset, c, gray, reset, pct, gray, reset, b, gray, reset } else { printf "%s│%s %s%-12s%s %s│%s %s%-8s%s %s│%s %s%14s%s %s│%s %9s %s│%s %8s %s│%s %s %s│%s\n", gray, reset, kc, label, reset, gray, reset, kc, k, reset, gray, reset, sc, h, reset, gray, reset, c, gray, reset, pct, gray, reset, b, gray, reset } }
     {
@@ -837,14 +943,16 @@ run_find \
 
 # shellcheck disable=SC2016
 generate_top_files() {
-run_find \
-| awk -v RS='\0' -F'\t' \
+scan_stream \
+| awk -v RS='\0' -F"$field_sep" \
     -v merge="$merge" \
     -v dir="$dir" \
     -v excludes="$exclude_data" \
     -v includes="$include_data" \
     -v typedata="$type_data" \
     -v target_ext="$top_files" \
+    -v OFS="$field_sep" \
+    -v top_stats_file="$top_stats_file" \
     "$common_awk_functions"'
     BEGIN {
         nex = split(excludes, ex, "\034")
@@ -856,18 +964,18 @@ run_find \
     NF >= 3 {
         size = $1 + 0; path = $2; base = $3
         if (excluded(path, base) || !included(path, base)) next
-        ext = extname(base); k = kind(ext)
+        ext = cached_extname(base); k = cached_kind(ext)
         if (!allowed_type(k)) next
         total += size; total_count += 1
-        if (toupper(ext) != target) next
-        n++
-        sizes[n] = size; paths[n] = path; exts[n] = ext; kinds[n] = k
+        if (toupper(ext) == target)
+            printf "%.0f%s%s%s%s%s%s\n", size, OFS, path, OFS, ext, OFS, k
     }
     END {
-        for (i = 1; i <= n; i++) printf "%.0f\t%s\t%s\t%s\t%.0f\t%d\n", sizes[i], paths[i], exts[i], kinds[i], total, total_count
+        printf "%.0f%s%d\n", total, OFS, total_count > top_stats_file
+        close(top_stats_file)
     }' \
-| sort -t "$tab" -k1,1nr \
-| awk -F'\t' \
+| LC_ALL=C sort -t "$field_sep" -k1,1nr \
+| awk -F"$field_sep" \
     -v limit="$limit" \
     -v dir="$dir" \
     -v mode="$mode" \
@@ -876,6 +984,8 @@ run_find \
     -v format="$format" \
     -v target_ext="$top_files" \
     -v errfile="$errfile" \
+    -v partial_file="$partial_file" \
+    -v top_stats_file="$top_stats_file" \
     -v start_ts="$start_ts" '
     BEGIN {
         if (color) { reset = "\033[0m"; bold = "\033[1m"; dim = "\033[2m"; cyan = "\033[36m"; gray = "\033[90m"; white = "\033[97m" } else { reset = bold = dim = cyan = gray = white = "" }
@@ -900,10 +1010,12 @@ run_find \
     function jsonq(s,    t) { t = s; gsub(/\\/, "\\\\", t); gsub(/"/, "\\\"", t); gsub(/\t/, "\\t", t); gsub(/\r/, "\\r", t); gsub(/\n/, "\\n", t); return "\"" t "\"" }
     function count_skipped(    line, n) { n = 0; while ((getline line < errfile) > 0) n++; close(errfile); return n }
     function commas(n,    s, out) { s = sprintf("%d", n); out = ""; while (length(s) > 3) { out = "," substr(s, length(s) - 2) out; s = substr(s, 1, length(s) - 3) } return s out }
-    function emit_summary(    skipped, elapsed, msg) { if (format != "table") return; skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; msg = "Scanned: " commas(total_count) " files · " trimhuman(human(total_bytes)) " · " elapsed "s"; if (skipped > 0) msg = msg " · " skipped " skipped"; print gray msg reset }
+    function read_top_stats(    line, a) { if ((getline line < top_stats_file) > 0) { split(line, a, FS); total_bytes = a[1] + 0; total_count = a[2] + 0 } close(top_stats_file) }
+    function is_partial(    line) { if ((getline line < partial_file) > 0) { close(partial_file); return 1 } close(partial_file); return 0 }
+    function emit_summary(    skipped, elapsed, msg) { if (format != "table") return; read_top_stats(); skipped = count_skipped(); elapsed = (start_ts > 0) ? systime() - start_ts : 0; msg = "Scanned: " commas(total_count) " files · " trimhuman(human(total_bytes)) " · " elapsed "s"; if (is_partial()) msg = msg " · partial"; if (skipped > 0) msg = msg " · " skipped " skipped"; print gray msg reset }
     function emit_row(bytes, path, ext, k,    h, prefix) { h = trimhuman(human(bytes)); if (format == "tsv") printf "%.0f\t%s\t%s\t%s\t%s\n", bytes, h, ext, k, path; else if (format == "csv") printf "%.0f,%s,%s,%s,%s\n", bytes, csvq(h), csvq(ext), csvq(k), csvq(path); else if (format == "json") { prefix = json_count ? "," : ""; printf "%s  {\"bytes\":%.0f,\"size\":%s,\"ext\":%s,\"type\":%s,\"path\":%s}\n", prefix, bytes, jsonq(h), jsonq(ext), jsonq(k), jsonq(path); json_count++ } else if (plain) printf "%14s %-8s %-10s %s\n", human(bytes), ext, k, path; else printf "%s│%s %s%14s%s %s│%s %-8s %s│%s %-8s %s│%s %-58s %s│%s\n", gray, reset, white, human(bytes), reset, gray, reset, ext, gray, reset, k, gray, reset, clip(path, 58), gray, reset }
     {
-        seen = 1; bytes = $1 + 0; path = $2; ext = $3; k = $4; total_bytes = $5 + 0; total_count = $6 + 0
+        seen = 1; bytes = $1 + 0; path = $2; ext = $3; k = $4
         if (shown < limit) { emit_row(bytes, path, ext, k); shown++ }
     }
     END {
@@ -934,17 +1046,31 @@ print_errors() {
 }
 
 generate() {
+    if [ "${SIZES_DEBUG_TIMING:-}" != "" ]; then
+        timing_start=$(date +%s 2>/dev/null || printf '0')
+    else
+        timing_start=0
+    fi
+
     if [ "$top_files" != "" ]; then
         generate_top_files
     else
         generate_report
     fi
     print_errors
+
+    if [ "${SIZES_DEBUG_TIMING:-}" != "" ]; then
+        timing_end=$(date +%s 2>/dev/null || printf '0')
+        if [ "$timing_start" -gt 0 ] && [ "$timing_end" -ge "$timing_start" ]; then
+            printf '%s\n' "sizes: timing total=$((timing_end - timing_start))s" >&2
+        fi
+    fi
 }
 
 run_with_progress() {
     progress_out=$(mktemp "${TMPDIR:-/tmp}/sizes-output.XXXXXX") || exit 1
     progress_err=$(mktemp "${TMPDIR:-/tmp}/sizes-stderr.XXXXXX") || exit 1
+    progress_count_file=$(mktemp "${TMPDIR:-/tmp}/sizes-progress.XXXXXX") || exit 1
 
     generate >"$progress_out" 2>"$progress_err" &
     progress_pid=$!
@@ -958,7 +1084,14 @@ run_with_progress() {
             2) progress_ch='|' ;;
             *) progress_ch='/' ;;
         esac
-        printf '\rsizes: scanning %s (%s) %s' "$dir" "$mode" "$progress_ch" >&2
+        progress_count=""
+        if [ -s "$progress_count_file" ]; then
+            progress_count=$(tail -n 1 "$progress_count_file" 2>/dev/null | tr -cd '0-9' || printf '')
+        fi
+        case "$progress_count" in
+            ''|*[!0-9]*) printf '\rsizes: scanning %s (%s) %s' "$dir" "$mode" "$progress_ch" >&2 ;;
+            *) printf '\rsizes: scanning %s (%s) %s %s files' "$dir" "$mode" "$progress_ch" "$progress_count" >&2 ;;
+        esac
         sleep 0.1
     done
 
@@ -968,7 +1101,8 @@ run_with_progress() {
     printf '\r%120s\r' ' ' >&2
     cat "$progress_out"
     cat "$progress_err" >&2
-    rm -f "$progress_out" "$progress_err"
+    rm -f "$progress_out" "$progress_err" "$progress_count_file"
+    progress_count_file=""
     return "$progress_status"
 }
 

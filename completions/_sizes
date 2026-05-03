@@ -4,6 +4,8 @@ _arguments -s -S \
   '(-r --recursive)'{-r,--recursive}'[scan recursively]' \
   '--depth[scan up to N directory levels]:depth:(0 1 2 3 4 5)' \
   '--follow[follow symlinks]' \
+  '(-x --one-file-system)'{-x,--one-file-system}'[do not cross filesystem boundaries]' \
+  '--max-files[stop after N scanned files]:max files:(1000 10000 100000 1000000)' \
   '(-n --limit)'{-n,--limit}'[show top N rows and combine the rest into OTHER]:limit:(10 20 25 40 50 100)' \
   '--min-size[fold rows smaller than SIZE into OTHER]:size:(1M 10M 100M 1G 10G)' \
   '--min-share[fold rows below PCT percent into OTHER]:percent:(0.01 0.1 1 5)' \

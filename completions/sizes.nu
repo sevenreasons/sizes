@@ -5,6 +5,8 @@ export extern sizes [
     --recursive(-r)          # Scan recursively
     --depth: int             # Scan up to N directory levels
     --follow                 # Follow symlinks
+    --one-file-system(-x)    # Do not cross filesystem boundaries
+    --max-files: int         # Stop after N scanned files
     --limit(-n): int         # Show top N rows and combine the rest into OTHER
     --min-size: string       # Fold rows smaller than SIZE into OTHER
     --min-share: number      # Fold rows below PCT percent into OTHER

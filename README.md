@@ -51,6 +51,8 @@ sizes DIR                          # chosen directory
 sizes DIR -r                       # chosen directory, recursive
 sizes -r --depth 2                 # recurse up to 2 levels
 sizes -r --follow                  # follow symlinks
+sizes -r -x                        # stay on one filesystem
+sizes -r --max-files 100000        # stop after N files and mark output partial
 sizes -r -n 50                     # top 50 + OTHER
 sizes -r --min-size 100M           # fold smaller rows into OTHER
 sizes -r --min-share 0.1           # fold rows below 0.1% into OTHER
@@ -75,6 +77,8 @@ sizes --no-color                   # no ANSI colors
 -r, --recursive          recursive scan
     --depth N            recurse up to N directory levels; overrides -r
     --follow             follow symlinks while scanning
+-x, --one-file-system    do not cross filesystem boundaries
+    --max-files N        stop after N scanned files and show partial result
 -n, --limit N            show top N rows and group the rest as OTHER
     --min-size SIZE      fold rows smaller than SIZE into OTHER
     --min-share PCT      fold rows below PCT percent into OTHER
@@ -104,7 +108,10 @@ sizes --no-color                   # no ANSI colors
 - Colors are disabled automatically when output is redirected.
 - Shows a progress spinner on interactive scans and only prints the table after scanning is done.
 - Table output ends with a compact scan summary.
-- Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, and `SIZES_UPGRADE_URL=...`.
+- Uses faster internal sorting with `LC_ALL=C` and robust unit-separator records for paths containing tabs.
+- `--include` filters are pushed into `find` where possible, reducing work on large trees.
+- `--top-files` streams candidates through `sort` instead of storing all matches in memory.
+- Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, and `SIZES_UPGRADE_URL=...`.
 
 ## Completions
 

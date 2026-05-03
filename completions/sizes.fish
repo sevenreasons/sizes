@@ -3,6 +3,8 @@
 complete -c sizes -s r -l recursive -d 'Scan recursively'
 complete -c sizes -l depth -d 'Scan up to N directory levels' -x -a '0 1 2 3 4 5'
 complete -c sizes -l follow -d 'Follow symlinks'
+complete -c sizes -s x -l one-file-system -d 'Do not cross filesystem boundaries'
+complete -c sizes -l max-files -d 'Stop after N scanned files' -x -a '1000 10000 100000 1000000'
 complete -c sizes -s n -l limit -d 'Show top N rows and combine the rest into OTHER' -x -a '10 20 25 40 50 100'
 complete -c sizes -l min-size -d 'Fold rows smaller than SIZE into OTHER' -x -a '1M 10M 100M 1G 10G'
 complete -c sizes -l min-share -d 'Fold rows below PCT percent into OTHER' -x -a '0.01 0.1 1 5'

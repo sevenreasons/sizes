@@ -15,6 +15,10 @@ _sizes_completion() {
             COMPREPLY=( $(compgen -W '0 1 2 3 4 5' -- "$cur") )
             return 0
             ;;
+        --max-files)
+            COMPREPLY=( $(compgen -W '1000 10000 100000 1000000' -- "$cur") )
+            return 0
+            ;;
         --min-size)
             COMPREPLY=( $(compgen -W '1M 10M 100M 1G 10G' -- "$cur") )
             return 0
@@ -47,7 +51,7 @@ _sizes_completion() {
     esac
 
     if [[ "$cur" == -* ]]; then
-        COMPREPLY=( $(compgen -W '-r --recursive --depth --follow -n --limit --min-size --min-share -e --exact -E --errors --include --exclude --type --top-files --sort --format --group-by --plain --no-progress --no-color --upgrade --check --version -h --help' -- "$cur") )
+        COMPREPLY=( $(compgen -W '-r --recursive --depth --follow -x --one-file-system --max-files -n --limit --min-size --min-share -e --exact -E --errors --include --exclude --type --top-files --sort --format --group-by --plain --no-progress --no-color --upgrade --check --version -h --help' -- "$cur") )
         return 0
     fi
 

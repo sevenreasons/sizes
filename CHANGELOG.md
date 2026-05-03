@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.1
+
+- Push `--include` filters into the `find` scan where possible.
+- Stream `--top-files` candidates instead of storing all matches in memory.
+- Add `--max-files N` as a safety valve for huge scans.
+- Add `--one-file-system` / `-x` to avoid crossing mount points.
+- Use `LC_ALL=C` internally for faster, predictable sorting.
+- Use ASCII unit-separator records internally for paths containing tabs.
+- Cache extension parsing and type classification in AWK.
+- Add optional timing diagnostics with `SIZES_DEBUG_TIMING=1`.
+- Show a cheap scanned-file count in the interactive progress line.
+- Fix progress counter writes to avoid shell null-byte warnings.
+- Add performance and path-robustness tests.
+
 ## 0.3.0
 
 - Add `--min-size` and `--min-share` filters.

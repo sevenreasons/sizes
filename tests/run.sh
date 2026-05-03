@@ -64,16 +64,17 @@ make_file "$SAMPLE/archive.zip" 2048
 make_file "$SAMPLE/sub/deep.png" 1024
 make_file "$SAMPLE/node_modules/junk.mp4" 8192
 make_file "$SAMPLE/.git/object.bin" 512
+make_file "$SAMPLE/tab$(printf '\t')song.mp3" 333
 
 OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.3\.0$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.3\.1$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.3\.0$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.3\.1$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -124,10 +125,10 @@ ok 'CLICOLOR=0'
 UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
 UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
 cp "$SIZES" "$UPGRADE_TARGET"
-sed 's/VERSION="0.3.0"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+sed 's/VERSION="0.3.1"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
 chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes: upgraded .+ from 0\.3\.0 to 9\.9\.9' '--upgrade reports old and new version'
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.3\.1 to 9\.9\.9' '--upgrade reports old and new version'
 "$UPGRADE_TARGET" --version >"$OUT"
 assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
 ok '--upgrade'
@@ -211,15 +212,33 @@ assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'follow keeps normal recur
 ok '--follow'
 
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" "$SIZES" --upgrade --check >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'current 0\.3\.0, available 9\.9\.9' 'upgrade check reports available version'
+assert_contains "$OUT" 'current 0\.3\.1, available 9\.9\.9' 'upgrade check reports available version'
 ok '--upgrade --check'
 
 UPGRADE_TARGET_VERSIONED="$TEST_ROOT/upgradable-versioned-sizes"
 cp "$SIZES" "$UPGRADE_TARGET_VERSIONED"
 chmod +x "$UPGRADE_TARGET_VERSIONED"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET_VERSIONED" "$UPGRADE_TARGET_VERSIONED" --upgrade --version v9.9.9 >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'from 0\.3\.0 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
+assert_contains "$OUT" 'from 0\.3\.1 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
 ok '--upgrade --version'
+
+
+
+env NO_COLOR=1 "$SIZES" -r "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" '│ MP3[[:space:]]+│ audio' 'tab-containing filename is parsed without breaking internal fields'
+ok 'tab filename robustness'
+
+env NO_COLOR=1 "$SIZES" -r --max-files 1 "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'partial' 'max-files marks output as partial'
+ok '--max-files'
+
+env NO_COLOR=1 "$SIZES" -r -x "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'one filesystem' 'one-file-system mode is shown in heading'
+ok '--one-file-system'
+
+SIZES_DEBUG_TIMING=1 "$SIZES" -r --format tsv "$SAMPLE" >"$OUT" 2>"$ERR"
+assert_contains "$ERR" 'sizes: timing total=[0-9]+s' 'debug timing writes total timing to stderr'
+ok 'SIZES_DEBUG_TIMING'
 
 
 printf '\n%d tests passed\n' "$pass"
