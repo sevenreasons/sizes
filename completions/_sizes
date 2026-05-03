@@ -1,0 +1,11 @@
+#compdef sizes
+
+_arguments \
+  '(-r --recursive)'{-r,--recursive}'[scan recursively]' \
+  '(-n --limit)'{-n,--limit}'[show top N extensions and fold the rest into OTHER]:limit:(10 20 30 40 50 100)' \
+  '(-e --exact)'{-e,--exact}'[do not merge aliases like JPEG -> JPG]' \
+  '(-E --errors)'{-E,--errors}'[print unreadable-path errors after the table]' \
+  '--no-color[disable ANSI colors]' \
+  '--version[print version]' \
+  '(-h --help)'{-h,--help}'[show help]' \
+  '1:directory:_files -/'

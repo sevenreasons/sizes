@@ -1,0 +1,8 @@
+complete -c sizes -s r -l recursive -d 'Scan recursively'
+complete -c sizes -s n -l limit -d 'Show top N extensions and fold the rest into OTHER' -x -a '10 20 30 40 50 100'
+complete -c sizes -s e -l exact -d 'Do not merge aliases like JPEG -> JPG'
+complete -c sizes -s E -l errors -d 'Print unreadable-path errors after the table'
+complete -c sizes -l no-color -d 'Disable ANSI colors'
+complete -c sizes -l version -d 'Print version'
+complete -c sizes -s h -l help -d 'Show help'
+complete -c sizes -a '(__fish_complete_directories)' -d 'Directory'
