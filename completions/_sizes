@@ -10,7 +10,9 @@ _arguments -s -S \
   '--format[output format]:format:(table tsv csv json)' \
   '--group-by[group rows]:field:(ext type)' \
   '--plain[use simple ASCII table]' \
+  '--no-progress[disable progress animation]' \
   '--no-color[disable ANSI colors]' \
+  '--upgrade[upgrade installed script]' \
   '--version[print version]' \
   '(-h --help)'{-h,--help}'[show help]' \
   '1:directory:_directories'

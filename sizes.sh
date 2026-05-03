@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.2.0"
+VERSION="0.2.1"
 
 usage() {
     cat <<'USAGE'
@@ -23,7 +23,9 @@ Options:
       --format FORMAT      Output table, tsv, csv, or json. Default: table.
       --group-by FIELD     Group by ext or type. Default: ext.
       --plain              Use a simple ASCII table.
+      --no-progress        Disable progress animation.
       --no-color           Disable ANSI colors.
+      --upgrade            Upgrade this script from GitHub.
       --version            Print version.
   -h, --help               Show this help.
 
@@ -32,6 +34,8 @@ Environment:
   CLICOLOR=0               Disable ANSI colors.
   SIZES_EXCLUDE="..."      Space-separated default exclude patterns.
   SIZES_FIND=/path/to/find Override find command.
+  SIZES_UPGRADE_URL=URL    Override --upgrade download source.
+  SIZES_UPGRADE_TARGET=PATH Override --upgrade target path.
 
 Examples:
   sizes
@@ -43,12 +47,93 @@ Examples:
   sizes -r --group-by type
   sizes -r --format json
   sizes --plain
+  sizes --upgrade
 USAGE
 }
 
 fail() {
     printf '%s\n' "sizes: $*" >&2
     exit 2
+}
+
+DEFAULT_UPGRADE_URL="https://raw.githubusercontent.com/sevenreasons/sizes/master/sizes.sh"
+
+download_to() {
+    url=$1
+    dest=$2
+
+    case "$url" in
+        file://*)
+            cp "${url#file://}" "$dest"
+            return $?
+            ;;
+        /*|./*|../*)
+            cp "$url" "$dest"
+            return $?
+            ;;
+    esac
+
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$url" -o "$dest"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$dest" "$url"
+    elif command -v fetch >/dev/null 2>&1; then
+        fetch -q -o "$dest" "$url"
+    else
+        printf '%s\n' "sizes: --upgrade needs curl, wget, or fetch" >&2
+        return 1
+    fi
+}
+
+self_upgrade() {
+    url=${SIZES_UPGRADE_URL:-$DEFAULT_UPGRADE_URL}
+    target=${SIZES_UPGRADE_TARGET:-}
+
+    if [ "$target" = "" ]; then
+        case "$0" in
+            */*) target=$0 ;;
+            *) target=$(command -v "$0" 2>/dev/null || printf '%s\n' "$0") ;;
+        esac
+    fi
+
+    if [ ! -f "$target" ]; then
+        printf '%s\n' "sizes: cannot find current script: $target" >&2
+        exit 1
+    fi
+
+    target_dir=$(CDPATH='' cd -- "$(dirname -- "$target")" && pwd) || exit 1
+    target_base=$(basename -- "$target")
+
+    if [ ! -w "$target" ] && [ ! -w "$target_dir" ]; then
+        printf '%s\n' "sizes: current script is not writable: $target" >&2
+        exit 1
+    fi
+
+    tmp=$(mktemp "$target_dir/.${target_base}.upgrade.XXXXXX") || exit 1
+
+    if ! download_to "$url" "$tmp"; then
+        rm -f "$tmp"
+        printf '%s\n' "sizes: upgrade download failed: $url" >&2
+        exit 1
+    fi
+
+    if ! sh "$tmp" --version >/dev/null 2>&1; then
+        rm -f "$tmp"
+        printf '%s\n' "sizes: downloaded file does not look like a working sizes script" >&2
+        exit 1
+    fi
+
+    new_version=$(sh "$tmp" --version 2>/dev/null | sed 's/^sizes //')
+    chmod +x "$tmp" 2>/dev/null || true
+
+    if ! mv "$tmp" "$target"; then
+        rm -f "$tmp"
+        printf '%s\n' "sizes: failed to replace current script: $target" >&2
+        exit 1
+    fi
+
+    chmod +x "$target" 2>/dev/null || true
+    printf '%s\n' "sizes: upgraded $target from $VERSION to $new_version"
 }
 
 recursive=0
@@ -60,6 +145,8 @@ plain=0
 sort_by="size"
 format="table"
 group_by="ext"
+progress=1
+upgrade=0
 dir="."
 dir_seen=0
 exclude_data=""
@@ -140,8 +227,16 @@ while [ "$#" -gt 0 ]; do
             color=0
             shift
             ;;
+        --no-progress)
+            progress=0
+            shift
+            ;;
         --no-color)
             color=0
+            shift
+            ;;
+        --upgrade)
+            upgrade=1
             shift
             ;;
         --version)
@@ -194,6 +289,11 @@ while [ "$#" -gt 0 ]; do
     shift
 done
 
+if [ "$upgrade" -eq 1 ]; then
+    self_upgrade
+    exit 0
+fi
+
 case "$sort_by" in
     size|files|share|ext|type) ;;
     *) fail "--sort must be one of: size, files, share, ext, type" ;;
@@ -212,6 +312,11 @@ esac
 if [ "$format" != "table" ]; then
     color=0
     plain=0
+    progress=0
+fi
+
+if [ ! -t 2 ]; then
+    progress=0
 fi
 
 if [ ! -d "$dir" ]; then
@@ -299,6 +404,7 @@ sort_records() {
     esac
 }
 
+generate_report() {
 run_find \
 | awk -v RS='\0' -F'\t' \
     -v merge="$merge" \
@@ -794,4 +900,42 @@ if [ "${err_count:-0}" -gt 0 ] 2>/dev/null; then
     if [ "$show_errors" -eq 1 ]; then
         cat "$errfile" >&2
     fi
+fi
+
+}
+
+run_with_progress() {
+    progress_out=$(mktemp "${TMPDIR:-/tmp}/sizes-output.XXXXXX") || exit 1
+    progress_err=$(mktemp "${TMPDIR:-/tmp}/sizes-stderr.XXXXXX") || exit 1
+
+    generate_report >"$progress_out" 2>"$progress_err" &
+    progress_pid=$!
+    progress_i=0
+
+    while kill -0 "$progress_pid" 2>/dev/null; do
+        progress_i=$((progress_i + 1))
+        case $((progress_i % 4)) in
+            0) progress_ch='-' ;;
+            1) progress_ch="\\" ;;
+            2) progress_ch='|' ;;
+            *) progress_ch='/' ;;
+        esac
+        printf '\rsizes: scanning %s (%s) %s' "$dir" "$mode" "$progress_ch" >&2
+        sleep 0.1
+    done
+
+    wait "$progress_pid"
+    progress_status=$?
+
+    printf '\r%120s\r' ' ' >&2
+    cat "$progress_out"
+    cat "$progress_err" >&2
+    rm -f "$progress_out" "$progress_err"
+    return "$progress_status"
+}
+
+if [ "$progress" -eq 1 ]; then
+    run_with_progress
+else
+    generate_report
 fi

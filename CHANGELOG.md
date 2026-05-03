@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- Add `--upgrade` for self-updating the installed script.
+- Add an interactive progress spinner while scanning.
+- Delay table output until the scan finishes.
+- Add `--no-progress` for disabling the spinner.
+- Update completions and tests.
+
 ## 0.2.0
 
 - Add `--sort` for sorting by size, files, share, extension, or type.

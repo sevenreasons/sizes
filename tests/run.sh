@@ -69,11 +69,11 @@ OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.2\.0$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.2\.1$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.2\.0$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.2\.1$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -120,6 +120,18 @@ if LC_ALL=C grep "$(printf '\033')" "$OUT" >/dev/null 2>&1; then
     fail 'CLICOLOR=0 output contains ANSI escapes'
 fi
 ok 'CLICOLOR=0'
+
+UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
+UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
+cp "$SIZES" "$UPGRADE_TARGET"
+sed 's/VERSION="0.2.1"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
+env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.2\.1 to 9\.9\.9' '--upgrade reports old and new version'
+"$UPGRADE_TARGET" --version >"$OUT"
+assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
+ok '--upgrade'
+
 
 env NO_COLOR=1 "$SIZES" -r --exclude node_modules --exclude .git "$SAMPLE" >"$OUT" 2>"$ERR"
 assert_not_contains "$OUT" '8192' 'exclude should skip node_modules files'

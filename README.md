@@ -55,6 +55,8 @@ sizes -r --sort files         # sort by file count
 sizes -r --group-by type      # summarize by type instead of extension
 sizes -r --format json        # table, tsv, csv, json
 sizes --plain                 # simple ASCII table
+sizes --no-progress           # disable scan spinner
+sizes --upgrade               # self-upgrade installed script
 sizes --no-color              # no ANSI colors
 ```
 
@@ -70,7 +72,9 @@ sizes --no-color              # no ANSI colors
     --format FORMAT      table, tsv, csv, json
     --group-by FIELD     ext, type
     --plain              simple ASCII table
+    --no-progress        disable progress animation
     --no-color           disable ANSI colors
+    --upgrade            upgrade the installed script
     --version            show version
 ```
 
@@ -81,7 +85,8 @@ sizes --no-color              # no ANSI colors
 - Sorts by total size unless `--sort` is used.
 - Groups extension aliases by default, for example `JPEG` into `JPG`.
 - Colors are disabled automatically when output is redirected.
-- Supports `NO_COLOR=1`, `CLICOLOR=0`, and `SIZES_EXCLUDE=".git node_modules"`.
+- Shows a progress spinner on interactive scans and only prints the table after scanning is done.
+- Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, and `SIZES_UPGRADE_URL=...`.
 
 ## Completions
 

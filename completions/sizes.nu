@@ -11,7 +11,9 @@ export extern sizes [
     --format: string         # Output table, tsv, csv, or json
     --group-by: string       # Group by ext or type
     --plain                  # Use simple ASCII table
+    --no-progress            # Disable progress animation
     --no-color               # Disable ANSI colors
+    --upgrade                # Upgrade installed script
     --version                # Print version
     --help(-h)               # Show help
 ]

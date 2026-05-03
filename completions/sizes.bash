@@ -31,7 +31,7 @@ _sizes_completion() {
     esac
 
     if [[ "$cur" == -* ]]; then
-        COMPREPLY=( $(compgen -W '-r --recursive -n --limit -e --exact -E --errors --exclude --sort --format --group-by --plain --no-color --version -h --help' -- "$cur") )
+        COMPREPLY=( $(compgen -W '-r --recursive -n --limit -e --exact -E --errors --exclude --sort --format --group-by --plain --no-progress --no-color --upgrade --version -h --help' -- "$cur") )
         return 0
     fi
 

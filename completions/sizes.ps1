@@ -33,7 +33,7 @@ Register-ArgumentCompleter -Native -CommandName sizes -ScriptBlock {
         }
     }
 
-    '-r','--recursive','-n','--limit','-e','--exact','-E','--errors','--exclude','--sort','--format','--group-by','--plain','--no-color','--version','-h','--help' |
+    '-r','--recursive','-n','--limit','-e','--exact','-E','--errors','--exclude','--sort','--format','--group-by','--plain','--no-progress','--no-color','--upgrade','--version','-h','--help' |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterName', $_) }
 }
