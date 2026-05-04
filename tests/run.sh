@@ -70,11 +70,11 @@ OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.7\.6$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.7\.7$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.7\.6$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.7\.7$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -125,10 +125,10 @@ ok 'CLICOLOR=0'
 UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
 UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
 cp "$SIZES" "$UPGRADE_TARGET"
-sed 's/VERSION="0.7.6"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+sed 's/VERSION="0.7.7"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
 chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes: upgraded .+ from 0\.7\.6 to 9\.9\.9' '--upgrade reports old and new version'
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.7\.7 to 9\.9\.9' '--upgrade reports old and new version'
 "$UPGRADE_TARGET" --version >"$OUT"
 assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
 ok '--upgrade'
@@ -213,14 +213,14 @@ assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'follow keeps normal recur
 ok '--follow'
 
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" "$SIZES" --upgrade --check >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'current 0\.7\.6, available 9\.9\.9' 'upgrade check reports available version'
+assert_contains "$OUT" 'current 0\.7\.7, available 9\.9\.9' 'upgrade check reports available version'
 ok '--upgrade --check'
 
 UPGRADE_TARGET_VERSIONED="$TEST_ROOT/upgradable-versioned-sizes"
 cp "$SIZES" "$UPGRADE_TARGET_VERSIONED"
 chmod +x "$UPGRADE_TARGET_VERSIONED"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET_VERSIONED" "$UPGRADE_TARGET_VERSIONED" --upgrade --version v9.9.9 >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'from 0\.7\.6 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
+assert_contains "$OUT" 'from 0\.7\.7 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
 ok '--upgrade --version'
 
 

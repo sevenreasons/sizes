@@ -139,7 +139,7 @@ JSON output includes scan metadata and rows:
 
 ```json
 {
-  "version": "0.7.6",
+  "version": "0.7.7",
   "root": ".",
   "mode": "recursive",
   "total_bytes": 123456,
