@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.1"
+VERSION="0.7.2"
 
 usage() {
     cat <<'USAGE'
@@ -1657,8 +1657,6 @@ run_interactive_scan() {
         progress_count_file=$(mktemp "${TMPDIR:-/tmp}/sizes-progress.XXXXXX") || exit 1
         progress_err=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-stderr.XXXXXX") || exit 1
 
-        printf '%s
-' "sizes: scanning $dir ($mode)..." >&2
         generate_interactive_data "$records_file" >"$summary_file" 2>"$progress_err" &
         progress_pid=$!
         progress_i=0

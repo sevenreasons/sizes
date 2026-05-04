@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.2
+
+- Fix interactive scan progress so it stays on one updating line instead of printing a duplicate scan line.
+
 ## 0.7.1
 
 - Add back navigation in interactive mode with `Esc` and `Ctrl-B`.
