@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.5.0"
+VERSION="0.5.1"
 
 usage() {
     cat <<'USAGE'
@@ -1322,6 +1322,7 @@ generate_interactive_data() {
         -v includes="$include_data" \
         -v typedata="$type_data" \
         -v records_file="$records_file" \
+        -v color="$color" \
         -v OFS="$field_sep" \
         "$common_awk_functions"'
         BEGIN {
@@ -1346,16 +1347,17 @@ generate_interactive_data() {
         END {
             close(records_file)
             for (e in bytes) {
-                share = total ? bytes[e] * 100 / total : 0
                 sortkey = bytes[e]
                 printf "%s%s%.0f%s%d%s%s%s%s%s%.0f%s%d\n", sortkey, OFS, bytes[e], OFS, count[e], OFS, e, OFS, type_for[e], OFS, total, OFS, total_count
             }
         }' \
     | sort_records \
     | awk -F"$field_sep" \
+        -v OFS="$field_sep" \
         -v limit="$limit" \
         -v min_size="$min_size" \
-        -v min_share="$min_share" '
+        -v min_share="$min_share" \
+        -v color="$color" '
         function human(n,    u, units) {
             split("B KiB MiB GiB TiB PiB", units, " ")
             u = 1
@@ -1363,7 +1365,48 @@ generate_interactive_data() {
             if (u == 1) return sprintf("%.0f %s", n, units[u])
             return sprintf("%.2f %s", n, units[u])
         }
-        BEGIN { limited = limit + 0 > 0 }
+        function commas(n,    s, out) {
+            s = sprintf("%d", n); out = ""
+            while (length(s) > 3) { out = "," substr(s, length(s) - 2) out; s = substr(s, 1, length(s) - 3) }
+            return s out
+        }
+        function kind_color(k) {
+            if (!color) return ""
+            if (k == "video") return red
+            if (k == "image") return magenta
+            if (k == "audio") return blue
+            if (k == "archive") return yellow
+            if (k == "doc") return green
+            if (k == "data" || k == "database" || k == "code") return cyan
+            if (k == "model" || k == "game") return yellow
+            if (k == "font") return magenta
+            if (k == "3d" || k == "subs") return green
+            if (k == "binary") return red
+            if (k == "meta" || k == "none") return gray
+            if (k == "mixed" || k == "all") return white
+            return cyan
+        }
+        function heat_color(bytes, p) {
+            if (!color) return ""
+            if (bytes >= 10 * 1024 * 1024 * 1024 || p >= 20) return red
+            if (bytes >= 1024 * 1024 * 1024 || p >= 5) return yellow
+            if (bytes >= 100 * 1024 * 1024 || p >= 1) return green
+            if (bytes > 0) return gray
+            return gray
+        }
+        function row_display(ext, k, bytes, files, total,    share, kc, sc, h, c) {
+            share = total ? bytes * 100 / total : 0
+            kc = kind_color(k); sc = heat_color(bytes, share); h = human(bytes); c = commas(files)
+            return sprintf("%s%-12s%s  %s%-10s%s  %s%14s%s  %9s  %7.2f%%", kc, ext, reset, kc, k, reset, sc, h, reset, c, share)
+        }
+        BEGIN {
+            limited = limit + 0 > 0
+            if (color) {
+                reset = "\033[0m"; red = "\033[31m"; green = "\033[32m"; yellow = "\033[33m"; blue = "\033[34m"; magenta = "\033[35m"; cyan = "\033[36m"; white = "\033[97m"; gray = "\033[90m"
+            } else {
+                reset = red = green = yellow = blue = magenta = cyan = white = gray = ""
+            }
+        }
         {
             seen = 1
             bytes = $2 + 0
@@ -1375,7 +1418,7 @@ generate_interactive_data() {
             share = total_bytes ? bytes * 100 / total_bytes : 0
             filtered = ((min_size + 0 > 0 && bytes < min_size) || (min_share + 0 >= 0 && share < min_share))
             if (!filtered && (!limited || shown < limit)) {
-                printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", ext, k, bytes, human(bytes), files, share
+                printf "%s%s%s%s%s%s%.0f%s%s%s%d%s%.2f\n", ext, OFS, row_display(ext, k, bytes, files, total_bytes), OFS, k, OFS, bytes, OFS, human(bytes), OFS, files, OFS, share
                 shown++
             } else {
                 other_bytes += bytes
@@ -1386,9 +1429,9 @@ generate_interactive_data() {
         END {
             if (other_types > 0) {
                 share = total_bytes ? other_bytes * 100 / total_bytes : 0
-                printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", "OTHER", "mixed", other_bytes, human(other_bytes), other_count, share
+                printf "%s%s%s%s%s%s%.0f%s%s%s%d%s%.2f\n", "OTHER", OFS, row_display("OTHER", "mixed", other_bytes, other_count, total_bytes), OFS, "mixed", OFS, other_bytes, OFS, human(other_bytes), OFS, other_count, OFS, share
             }
-            if (seen) printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", "TOTAL", "all", total_bytes, human(total_bytes), total_count, 100
+            if (seen) printf "%s%s%s%s%s%s%.0f%s%s%s%d%s%.2f\n", "TOTAL", OFS, row_display("TOTAL", "all", total_bytes, total_count, total_bytes), OFS, "all", OFS, total_bytes, OFS, human(total_bytes), OFS, total_count, OFS, 100
         }'
 }
 
@@ -1400,10 +1443,11 @@ set -eu
 
 records_file=$1
 ext=$2
+preview_mode=${3:-files}
 field_sep=$(printf '\037')
 
-if [ "$ext" = "" ] || [ "$ext" = "TOTAL" ]; then
-    printf '%s\n' 'Select an extension to preview its largest files.'
+if [ "$ext" = "" ]; then
+    printf '%s\n' 'Select an extension to preview details.'
     exit 0
 fi
 
@@ -1413,36 +1457,89 @@ if [ "$ext" = "OTHER" ]; then
     exit 0
 fi
 
-awk -F"$field_sep" -v target="$ext" '
-    toupper($3) == toupper(target) { print $0 }
-' "$records_file" \
-| LC_ALL=C sort -t "$field_sep" -k1,1nr \
-| awk -F"$field_sep" -v target="$ext" '
-    function human(n,    u, units) {
-        split("B KiB MiB GiB TiB PiB", units, " ")
-        u = 1
-        while (n >= 1024 && u < 6) { n /= 1024; u++ }
-        if (u == 1) return sprintf("%9.0f %s", n, units[u])
-        return sprintf("%9.2f %s", n, units[u])
-    }
-    function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
-    BEGIN {
-        top = "╭────────────────┬──────────┬────────────────────────────────────────────────────────────╮"
-        mid = "├────────────────┼──────────┼────────────────────────────────────────────────────────────┤"
-        bottom = "╰────────────────┴──────────┴────────────────────────────────────────────────────────────╯"
-        print "Top files for " target
-        print top
-        printf "│ %14s │ %-8s │ %-58s │\n", "SIZE", "TYPE", "PATH"
-        print mid
-    }
-    NR <= 20 {
-        seen = 1
-        printf "│ %14s │ %-8s │ %-58s │\n", human($1), $4, clip($2, 58)
-    }
-    END {
-        if (!seen) printf "│ %14s │ %-8s │ %-58s │\n", "-", "-", "No matching files"
-        print bottom
-    }'
+case "$preview_mode" in
+    dirs)
+        awk -F"$field_sep" -v target="$ext" '
+            function keep() { return target == "TOTAL" || toupper($3) == toupper(target) }
+            function dirname(path,    d) {
+                d = path
+                sub(/\/[^\/]*$/, "", d)
+                if (d == "" || d == path) return "."
+                return d
+            }
+            keep() {
+                d = dirname($2)
+                bytes[d] += $1
+                files[d] += 1
+                total += $1
+                total_files += 1
+            }
+            END {
+                for (d in bytes) printf "%.0f%s%d%s%s\n", bytes[d], FS, files[d], FS, d
+            }' "$records_file" \
+        | LC_ALL=C sort -t "$field_sep" -k1,1nr \
+        | awk -F"$field_sep" -v target="$ext" '
+            function human(n,    u, units) {
+                split("B KiB MiB GiB TiB PiB", units, " ")
+                u = 1
+                while (n >= 1024 && u < 6) { n /= 1024; u++ }
+                if (u == 1) return sprintf("%9.0f %s", n, units[u])
+                return sprintf("%9.2f %s", n, units[u])
+            }
+            function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+            BEGIN {
+                title = target == "TOTAL" ? "Top directories overall" : "Top directories for " target
+                top = "╭────────────────┬───────────┬────────────────────────────────────────────────────────────╮"
+                mid = "├────────────────┼───────────┼────────────────────────────────────────────────────────────┤"
+                bottom = "╰────────────────┴───────────┴────────────────────────────────────────────────────────────╯"
+                print title
+                print top
+                printf "│ %14s │ %9s │ %-58s │\n", "SIZE", "FILES", "DIR"
+                print mid
+            }
+            NR <= 20 {
+                seen = 1
+                printf "│ %14s │ %9d │ %-58s │\n", human($1), $2, clip($3, 58)
+            }
+            END {
+                if (!seen) printf "│ %14s │ %9s │ %-58s │\n", "-", "-", "No matching directories"
+                print bottom
+            }'
+        ;;
+    *)
+        awk -F"$field_sep" -v target="$ext" '
+            target == "TOTAL" || toupper($3) == toupper(target) { print $0 }
+        ' "$records_file" \
+        | LC_ALL=C sort -t "$field_sep" -k1,1nr \
+        | awk -F"$field_sep" -v target="$ext" '
+            function human(n,    u, units) {
+                split("B KiB MiB GiB TiB PiB", units, " ")
+                u = 1
+                while (n >= 1024 && u < 6) { n /= 1024; u++ }
+                if (u == 1) return sprintf("%9.0f %s", n, units[u])
+                return sprintf("%9.2f %s", n, units[u])
+            }
+            function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+            BEGIN {
+                title = target == "TOTAL" ? "Top files overall" : "Top files for " target
+                top = "╭────────────────┬──────────┬────────────────────────────────────────────────────────────╮"
+                mid = "├────────────────┼──────────┼────────────────────────────────────────────────────────────┤"
+                bottom = "╰────────────────┴──────────┴────────────────────────────────────────────────────────────╯"
+                print title
+                print top
+                printf "│ %14s │ %-8s │ %-58s │\n", "SIZE", "TYPE", "PATH"
+                print mid
+            }
+            NR <= 20 {
+                seen = 1
+                printf "│ %14s │ %-8s │ %-58s │\n", human($1), $4, clip($2, 58)
+            }
+            END {
+                if (!seen) printf "│ %14s │ %-8s │ %-58s │\n", "-", "-", "No matching files"
+                print bottom
+            }'
+        ;;
+esac
 PREVIEW
     chmod +x "$preview_script"
 }
@@ -1482,7 +1579,7 @@ run_interactive_scan() {
         progress_status=$?
         printf '\r%120s\r' ' ' >&2
         cat "$progress_err" >&2
-        rm -f "$progress_err"
+        rm -f "$progress_err" "$progress_count_file"
         return "$progress_status"
     fi
 
@@ -1514,21 +1611,30 @@ run_interactive() {
         return 0
     fi
 
+    header=$(printf '%s\n%s\n%s' \
+        'sizes interactive — / search · ↑↓ select · Ctrl-F files · Ctrl-D dirs · Enter details · Esc quit' \
+        '────────────────────────────────────────────────────────────────────────────────────────────' \
+        'EXT           TYPE              SIZE      FILES    SHARE')
+
     selected=$("$fzf_cmd" \
         --ansi \
-        --delimiter='\t' \
-        --with-nth=1,2,4,5,6 \
-        --header='EXT          TYPE       SIZE        FILES    SHARE     / search · Enter preview selection · Esc quit' \
+        --no-sort \
+        --cycle \
+        --delimiter="$field_sep" \
+        --with-nth=2 \
+        --header="$header" \
         --prompt='sizes> ' \
-        --preview="$preview_script '$records_file' {1}" \
+        --preview="$preview_script '$records_file' {1} files" \
+        --bind="ctrl-f:change-preview($preview_script '$records_file' {1} files)" \
+        --bind="ctrl-d:change-preview($preview_script '$records_file' {1} dirs)" \
         --preview-window='right:65%:wrap' \
-        --height='85%' \
+        --height='95%' \
         --border \
         <"$summary_file" || true)
 
     if [ "$selected" != "" ]; then
-        selected_ext=$(printf '%s\n' "$selected" | awk -F'\t' '{ print $1 }')
-        printf '%s\n' "$selected" | awk -F'\t' '
+        selected_ext=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $1 }')
+        printf '%s\n' "$selected" | awk -F"$field_sep" '
             BEGIN {
                 top = "╭──────────────┬──────────┬────────────────┬───────────┬──────────╮"
                 mid = "├──────────────┼──────────┼────────────────┼───────────┼──────────┤"
@@ -1539,11 +1645,13 @@ run_interactive() {
                 print mid
             }
             {
-                printf "│ %-12s │ %-8s │ %14s │ %9s │ %7.2f%% │\n", $1, $2, $4, $5, $6
+                printf "│ %-12s │ %-8s │ %14s │ %9s │ %7.2f%% │\n", $1, $3, $5, $6, $7
             }
             END { print bottom }'
         printf '\n'
-        "$preview_script" "$records_file" "$selected_ext"
+        "$preview_script" "$records_file" "$selected_ext" files
+        printf '\n'
+        "$preview_script" "$records_file" "$selected_ext" dirs
     fi
 
     print_errors

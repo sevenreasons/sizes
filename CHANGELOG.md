@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1
+
+- Improve `--interactive` with aligned colored rows that match the main table style.
+- Add interactive preview switching: `Ctrl-F` for top files and `Ctrl-D` for top directories.
+- Keep fzf ordering stable with `--no-sort` while still supporting search/filtering.
+- Print both top files and top directories after accepting a row.
+- Update tests.
+
 ## 0.5.0
 
 - Add `--interactive` / `-i` for an `fzf`-powered extension browser.

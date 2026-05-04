@@ -1,12 +1,11 @@
 # Release notes
 
-## v0.5.0
+## v0.5.1
 
-- Add `--interactive` / `-i` for an `fzf`-powered extension browser.
-- Add a preview pane showing the largest files for the selected extension.
-- Print a selected-extension detail table after pressing Enter.
-- Respect existing filters such as `--include`, `--exclude`, `--type`, `--limit`, `--min-size`, and `--min-share` in interactive mode.
-- Add `SIZES_FZF` for overriding the `fzf` command.
+- Improve `--interactive` with aligned colored rows that match the main table style.
+- Keep the extension list sorted and searchable in `fzf`.
+- Add `Ctrl-F` preview for top files and `Ctrl-D` preview for top directories.
+- Print both top files and top directories after accepting a selected extension.
 
 ## Release checklist
 
@@ -14,7 +13,7 @@
 sh tests/run.sh
 shellcheck sizes.sh sizes tests/run.sh
 git add -A
-git commit -m "Add fzf interactive browser for v0.5.0"
-git tag -f v0.5.0
+git commit -m "Improve interactive browser for v0.5.1"
+git tag -f v0.5.1
 git push origin master --tags
 ```

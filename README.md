@@ -121,7 +121,7 @@ sizes --no-color                   # no ANSI colors
 - `--include` filters are pushed into `find` where possible, reducing work on large trees.
 - `--top-files` streams candidates through `sort` instead of storing all matches in memory.
 - `--top-dirs` and `--by-dir` help locate where space is coming from.
-- `--interactive` opens an `fzf` browser with a preview pane for top files per extension.
+- `--interactive` opens an `fzf` browser with aligned colored rows, stable ordering, search, and previews. Use `Ctrl-F` for top files and `Ctrl-D` for top directories.
 - JSON output includes metadata such as version, root, mode, elapsed time, skipped paths, partial status, totals, and rows.
 - `--save` writes the selected output directly to a file and infers JSON/CSV/TSV from the filename.
 - Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, `SIZES_FZF=...`, and `SIZES_UPGRADE_URL=...`.
