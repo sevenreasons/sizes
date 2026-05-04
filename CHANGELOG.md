@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1
+
+- Fix interactive start menu spacing so labels and descriptions render as separate aligned text.
+
 ## 0.6.0
 
 - Replace the direct interactive row view with a start menu for extensions, types, top files, top directories, and directory summaries.

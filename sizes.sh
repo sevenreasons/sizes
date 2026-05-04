@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.6.0"
+VERSION="0.6.1"
 
 usage() {
     cat <<'USAGE'
@@ -2238,12 +2238,12 @@ run_interactive_start_menu() {
 
     menu_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-menu.XXXXXX") || exit 1
     cat >"$menu_file" <<EOF
-extensions${field_sep}Extensions${field_sep}Browse extension summary, then drill into files or directories
-types${field_sep}Types${field_sep}Browse by extension category such as video, image, archive, model
-top-files${field_sep}Top files${field_sep}Browse the largest files across the scan
-top-dirs${field_sep}Top directories${field_sep}Browse the largest directories across the scan
-by-dir${field_sep}By directory${field_sep}Browse directory summaries
-help${field_sep}Help${field_sep}Show interactive shortcuts and behavior
+extensions${field_sep}Extensions       Browse extension summary, then drill into files or directories
+types${field_sep}Types            Browse by extension category such as video, image, archive, model
+top-files${field_sep}Top files        Browse the largest files across the scan
+top-dirs${field_sep}Top directories  Browse the largest directories across the scan
+by-dir${field_sep}By directory     Browse directory summaries
+help${field_sep}Help             Show interactive shortcuts and behavior
 EOF
 
     preview_window=$(interactive_preview_window)
@@ -2252,7 +2252,7 @@ EOF
         --no-sort \
         --cycle \
         --delimiter="$field_sep" \
-        --with-nth=2,3 \
+        --with-nth=2 \
         --header='sizes interactive — choose a mode' \
         --prompt='sizes> ' \
         --layout=reverse \
