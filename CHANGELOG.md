@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.6
+
+- Fix interactive file and directory browsers to preserve cursor position after actions without leaking selected paths into the search box.
+
 
 ## 0.7.5
 

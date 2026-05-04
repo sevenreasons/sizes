@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.5"
+VERSION="0.7.6"
 
 usage() {
     cat <<'USAGE'
@@ -2455,6 +2455,7 @@ run_interactive_file_browser() {
     label=$ext
     case "$ext" in TYPE:*) label=${ext#TYPE:} ;; esac
     query=
+    cursor_pos=1
 
     while ! interactive_quit_requested; do
         file_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-files.XXXXXX") || exit 1
@@ -2483,24 +2484,26 @@ run_interactive_file_browser() {
             --layout=reverse \
             --info=inline-right \
             --preview="$item_preview_script file {1} {6} {4} {3}" \
-            --bind="ctrl-o:execute-silent($open_script {1} open),ctrl-p:execute-silent($open_script {1} parent),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
+            --bind="start:pos($cursor_pos),ctrl-o:execute-silent($open_script {1} open),ctrl-p:execute-silent($open_script {1} parent),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
             --preview-window="$preview_window" \
             --height='95%' \
             --border \
             <"$file_list" || true)
 
-        rm -f "$file_list"
-        interactive_quit_requested && return 0
-        [ "$fzf_out" = "" ] && return 0
+        interactive_quit_requested && { rm -f "$file_list"; return 0; }
+        [ "$fzf_out" = "" ] && { rm -f "$file_list"; return 0; }
 
         parsed=$(interactive_select_parts "$fzf_out")
         key=$(printf '%s\n' "$parsed" | sed -n '1p')
         selected=$(printf '%s\n' "$parsed" | sed -n '2,$p' | sed '/^$/d')
         first_selected=$(printf '%s\n' "$selected" | sed -n '1p')
         first_path=$(printf '%s\n' "$first_selected" | awk -F"$field_sep" '{ print $1 }')
-        # Do not seed the next fzf query with the selected filename.
-        # It made drilldown views reopen with a stale filename in the input
-        # after open/copy/action-menu flows, hiding the rest of the list.
+        if [ "$first_selected" != "" ]; then
+            cursor_pos=$(awk -v s="$first_selected" '$0 == s { print NR; found = 1; exit } END { if (!found) print 1 }' "$file_list")
+        fi
+        rm -f "$file_list"
+        # Preserve cursor position, not query text. This keeps the selected file
+        # highlighted after returning from an action without hiding other rows.
 
         case "$key" in
             ctrl-o) [ "$first_path" != "" ] && "$open_script" "$first_path" open ;;
@@ -2533,6 +2536,7 @@ run_interactive_dir_browser() {
     label=$ext
     case "$ext" in TYPE:*) label=${ext#TYPE:} ;; esac
     query=
+    cursor_pos=1
 
     while ! interactive_quit_requested; do
         dir_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-dirs.XXXXXX") || exit 1
@@ -2560,22 +2564,25 @@ run_interactive_dir_browser() {
             --layout=reverse \
             --info=inline-right \
             --preview="$item_preview_script dir {1} {6} {4} {3} {7}" \
-            --bind="ctrl-o:execute-silent($open_script {1} open-dir),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
+            --bind="start:pos($cursor_pos),ctrl-o:execute-silent($open_script {1} open-dir),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
             --preview-window="$preview_window" \
             --height='95%' \
             --border \
             <"$dir_list" || true)
 
-        rm -f "$dir_list"
-        interactive_quit_requested && return 0
-        [ "$fzf_out" = "" ] && return 0
+        interactive_quit_requested && { rm -f "$dir_list"; return 0; }
+        [ "$fzf_out" = "" ] && { rm -f "$dir_list"; return 0; }
 
         parsed=$(interactive_select_parts "$fzf_out")
         key=$(printf '%s\n' "$parsed" | sed -n '1p')
         selected=$(printf '%s\n' "$parsed" | sed -n '2p')
         path=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $1 }')
-        # Keep directory drilldown lists unfiltered when returning from actions.
-        # Full path reveal/open/copy must not leak the selected basename into fzf search.
+        if [ "$selected" != "" ]; then
+            cursor_pos=$(awk -v s="$selected" '$0 == s { print NR; found = 1; exit } END { if (!found) print 1 }' "$dir_list")
+        fi
+        rm -f "$dir_list"
+        # Preserve cursor position, not query text. This keeps the selected dir
+        # highlighted after returning from an action without hiding other rows.
         case "$key" in
             ctrl-o) [ "$path" != "" ] && "$open_script" "$path" open-dir ;;
             ctrl-y) [ "$path" != "" ] && "$open_script" "$path" copy ;;

@@ -1,11 +1,6 @@
-# v0.7.5
+# v0.7.6
 
-Interactive UX polish.
+Bugfix release for interactive navigation.
 
-- Add `--interactive-no-preview` / `SIZES_INTERACTIVE_PREVIEW=0`.
-- Add `Ctrl-L` full-path reveal in file and directory browsers.
-- Add copy quoted path actions.
-- Add Open with… actions through `SIZES_OPEN_WITH` or a prompt.
-- Add consistent Back/Quit rows to action menus.
-- Improve empty preview fallbacks and selected-item detail output.
-- Print a short interactive session closed message on exit.
+- Preserve file and directory cursor position after open/copy/action-menu flows.
+- Keep the interactive search box clear so the full list remains visible.
