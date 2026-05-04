@@ -1,6 +1,7 @@
-# v0.7.2
+# v0.7.3
 
-Bugfix release for interactive scan status output.
+Polishes interactive action menus.
 
-- Remove the extra newline-style scan intro before interactive progress starts.
-- Keep interactive scan progress on a single updating line.
+- Action menus now display the selected file or directory in the header.
+- Action menus now include a preview card for the selected item.
+- File and directory actions now show clearer feedback after open/copy actions.

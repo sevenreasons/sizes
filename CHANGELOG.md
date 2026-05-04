@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.3
+
+- Polish interactive file and directory action menus.
+- Show the selected item directly in action-menu headers.
+- Add action-menu preview cards with path, size, type, and available shortcuts.
+- Add feedback notices for file open, folder open, and copy actions.
+
 ## 0.7.2
 
 - Fix interactive scan progress so it stays on one updating line instead of printing a duplicate scan line.

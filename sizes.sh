@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.2"
+VERSION="0.7.3"
 
 usage() {
     cat <<'USAGE'
@@ -2091,7 +2091,24 @@ run_file_action_menu() {
     selected_file=$2
     open_script=$3
 
+    path=$(printf '%s\n' "$selected_file" | awk -F"$field_sep" '{print $1}')
+    ext=$(printf '%s\n' "$selected_file" | awk -F"$field_sep" '{print $3}')
+    kind=$(printf '%s\n' "$selected_file" | awk -F"$field_sep" '{print $4}')
+    size_h=$(printf '%s\n' "$selected_file" | awk -F"$field_sep" '{print $6}')
+    short_path=$(printf '%s\n' "$path" | awk '
+        function middle(s, w,    keep, left, right) {
+            if (length(s) <= w) return s
+            keep = w - 3
+            left = int(keep * 0.38)
+            right = keep - left
+            return substr(s, 1, left) "..." substr(s, length(s) - right + 1)
+        }
+        { print middle($0, 86) }
+    ')
+
     action_file=$(mktemp "${TMPDIR:-/tmp}/sizes-file-actions.XXXXXX") || exit 1
+    item_file=$(mktemp "${TMPDIR:-/tmp}/sizes-file-action-item.XXXXXX") || exit 1
+
     cat >"$action_file" <<EOF
 open${field_sep}Open file
 folder${field_sep}Open containing folder
@@ -2100,28 +2117,86 @@ path${field_sep}Print path
 details${field_sep}Print details
 back${field_sep}Back
 EOF
+
+    {
+        printf '%s\n' 'File'
+        printf '%s\n\n' '────'
+        printf '%s\n' 'Path'
+        printf '  %s\n\n' "$path"
+        printf '%-10s %s\n' 'Size' "${size_h:-'-'}"
+        printf '%-10s %s\n' 'Ext' "${ext:-'-'}"
+        printf '%-10s %s\n\n' 'Type' "${kind:-'-'}"
+        printf '%s\n' 'Actions'
+        printf '%s\n' '───────'
+        printf '%-10s %s\n' 'Enter' 'run selected action'
+        printf '%-10s %s\n' 'Ctrl-O' 'open file'
+        printf '%-10s %s\n' 'Ctrl-P' 'open containing folder'
+        printf '%-10s %s\n' 'Ctrl-Y' 'copy path'
+        printf '%-10s %s\n' 'Esc' 'back'
+    } >"$item_file"
+
+    preview_window=$(interactive_preview_window)
+    header=$(interactive_screen_header 'sizes › file › action' "Selected: $short_path" 'ACTION')
     choice=$("$fzf_cmd" \
         --ansi \
         --no-sort \
+        --expect=enter,ctrl-o,ctrl-p,ctrl-y \
         --delimiter="$field_sep" \
         --with-nth=2 \
-        --header='sizes › file actions' \
+        --header="$header" \
         --prompt='sizes › file › action> ' \
         --layout=reverse \
-        --height='50%' \
+        --info=inline-right \
+        --height='70%' \
         --border \
+        --preview="cat \"$item_file\"" \
+        --preview-window="$preview_window" \
         --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort" \
         <"$action_file" || true)
-    rm -f "$action_file"
+    rm -f "$action_file" "$item_file"
 
     interactive_quit_requested && return 0
 
-    action=$(printf '%s\n' "$choice" | awk -F"$field_sep" '{print $1}')
-    path=$(printf '%s\n' "$selected_file" | awk -F"$field_sep" '{print $1}')
+    parsed=$(interactive_select_parts "$choice")
+    key=$(printf '%s\n' "$parsed" | sed -n '1p')
+    selected_action=$(printf '%s\n' "$parsed" | sed -n '2p')
+    action=$(printf '%s\n' "$selected_action" | awk -F"$field_sep" '{print $1}')
+
+    case "$key" in
+        ctrl-o) action=open ;;
+        ctrl-p) action=folder ;;
+        ctrl-y) action=copy ;;
+    esac
+
     case "$action" in
-        open) "$open_script" "$path" open ;;
-        folder) "$open_script" "$path" parent ;;
-        copy) "$open_script" "$path" copy ;;
+        open)
+            if "$open_script" "$path" open; then
+                run_interactive_notice "$fzf_cmd" 'sizes › opened file' "Opened file:
+$path"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › open failed' "Could not open file:
+$path"
+            fi
+            ;;
+        folder)
+            if "$open_script" "$path" parent; then
+                parent=$(dirname -- "$path")
+                run_interactive_notice "$fzf_cmd" 'sizes › opened folder' "Opened containing folder:
+$parent"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › open failed' "Could not open containing folder for:
+$path"
+            fi
+            ;;
+        copy)
+            if "$open_script" "$path" copy; then
+                run_interactive_notice "$fzf_cmd" 'sizes › copied path' "Copied path:
+$path"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › copy unavailable' "No clipboard tool found. Path:
+$path"
+            fi
+            ;;
         path) printf '%s\n' "$path" ;;
         details) print_selected_file "$selected_file" ;;
         back|'') : ;;
@@ -2136,7 +2211,25 @@ run_dir_action_menu() {
     records_file=$4
     item_preview_script=$5
 
+    path=$(printf '%s\n' "$selected_dir" | awk -F"$field_sep" '{print $1}')
+    ext=$(printf '%s\n' "$selected_dir" | awk -F"$field_sep" '{print $3}')
+    kind=$(printf '%s\n' "$selected_dir" | awk -F"$field_sep" '{print $4}')
+    size_h=$(printf '%s\n' "$selected_dir" | awk -F"$field_sep" '{print $6}')
+    files=$(printf '%s\n' "$selected_dir" | awk -F"$field_sep" '{print $7}')
+    short_path=$(printf '%s\n' "$path" | awk '
+        function middle(s, w,    keep, left, right) {
+            if (length(s) <= w) return s
+            keep = w - 3
+            left = int(keep * 0.38)
+            right = keep - left
+            return substr(s, 1, left) "..." substr(s, length(s) - right + 1)
+        }
+        { print middle($0, 86) }
+    ')
+
     action_file=$(mktemp "${TMPDIR:-/tmp}/sizes-dir-actions.XXXXXX") || exit 1
+    item_file=$(mktemp "${TMPDIR:-/tmp}/sizes-dir-action-item.XXXXXX") || exit 1
+
     cat >"$action_file" <<EOF
 open${field_sep}Open directory
 browse${field_sep}Browse files in directory
@@ -2145,35 +2238,81 @@ path${field_sep}Print path
 details${field_sep}Print details
 back${field_sep}Back
 EOF
+
+    {
+        printf '%s\n' 'Directory'
+        printf '%s\n\n' '─────────'
+        printf '%s\n' 'Path'
+        printf '  %s\n\n' "$path"
+        printf '%-10s %s\n' 'Size' "${size_h:-'-'}"
+        printf '%-10s %s\n' 'Files' "${files:-'-'}"
+        printf '%-10s %s\n' 'Ext' "${ext:-'-'}"
+        printf '%-10s %s\n\n' 'Type' "${kind:-'-'}"
+        printf '%s\n' 'Actions'
+        printf '%s\n' '───────'
+        printf '%-10s %s\n' 'Enter' 'run selected action'
+        printf '%-10s %s\n' 'Ctrl-O' 'open directory'
+        printf '%-10s %s\n' 'Ctrl-Y' 'copy path'
+        printf '%-10s %s\n' 'Esc' 'back'
+    } >"$item_file"
+
+    preview_window=$(interactive_preview_window)
+    header=$(interactive_screen_header 'sizes › dir › action' "Selected: $short_path" 'ACTION')
     choice=$("$fzf_cmd" \
         --ansi \
         --no-sort \
+        --expect=enter,ctrl-o,ctrl-y \
         --delimiter="$field_sep" \
         --with-nth=2 \
-        --header='sizes › directory actions' \
+        --header="$header" \
         --prompt='sizes › dir › action> ' \
         --layout=reverse \
-        --height='50%' \
+        --info=inline-right \
+        --height='70%' \
         --border \
+        --preview="cat \"$item_file\"" \
+        --preview-window="$preview_window" \
         --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort" \
         <"$action_file" || true)
-    rm -f "$action_file"
+    rm -f "$action_file" "$item_file"
 
     interactive_quit_requested && return 0
 
-    action=$(printf '%s\n' "$choice" | awk -F"$field_sep" '{print $1}')
-    path=$(printf '%s\n' "$selected_dir" | awk -F"$field_sep" '{print $1}')
+    parsed=$(interactive_select_parts "$choice")
+    key=$(printf '%s\n' "$parsed" | sed -n '1p')
+    selected_action=$(printf '%s\n' "$parsed" | sed -n '2p')
+    action=$(printf '%s\n' "$selected_action" | awk -F"$field_sep" '{print $1}')
+
+    case "$key" in
+        ctrl-o) action=open ;;
+        ctrl-y) action=copy ;;
+    esac
+
     case "$action" in
-        open) if "$open_script" "$path" open-dir; then run_interactive_notice "$fzf_cmd" 'sizes › opened directory' "Opened directory:
-$path"; else run_interactive_notice "$fzf_cmd" 'sizes › open failed' "Could not open directory:
-$path"; fi ;;
+        open)
+            if "$open_script" "$path" open-dir; then
+                run_interactive_notice "$fzf_cmd" 'sizes › opened directory' "Opened directory:
+$path"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › open failed' "Could not open directory:
+$path"
+            fi
+            ;;
         browse)
             tmp_records=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-dir-records.XXXXXX") || exit 1
             awk -F"$field_sep" -v p="$path" '($2 == p || index($2, p "/") == 1) { print }' "$records_file" >"$tmp_records"
             run_interactive_file_browser "$fzf_cmd" "$tmp_records" TOTAL "$item_preview_script" "$open_script"
             rm -f "$tmp_records"
             ;;
-        copy) "$open_script" "$path" copy ;;
+        copy)
+            if "$open_script" "$path" copy; then
+                run_interactive_notice "$fzf_cmd" 'sizes › copied path' "Copied path:
+$path"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › copy unavailable' "No clipboard tool found. Path:
+$path"
+            fi
+            ;;
         path) printf '%s\n' "$path" ;;
         details) print_selected_dir "$selected_dir" ;;
         back|'') : ;;

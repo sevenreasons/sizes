@@ -110,6 +110,8 @@ Ctrl-O   open directory
 Ctrl-Y   copy path
 ```
 
+Action menus show the selected file or directory in the header and preview pane before running an action.
+
 Preview scrolling:
 
 ```text
@@ -132,7 +134,7 @@ JSON output includes scan metadata and rows:
 
 ```json
 {
-  "version": "0.7.2",
+  "version": "0.7.3",
   "root": ".",
   "mode": "recursive",
   "total_bytes": 123456,
