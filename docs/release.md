@@ -1,12 +1,12 @@
 # Release notes
 
-## v0.4.0
+## v0.5.0
 
-- Add `--top-dirs [EXT]` for directory drilldown.
-- Add `--by-dir` for immediate directory summaries.
-- Improve JSON output with metadata and structured rows.
-- Add `--save PATH` with extension-based format inference.
-- Expand extension/type detection.
+- Add `--interactive` / `-i` for an `fzf`-powered extension browser.
+- Add a preview pane showing the largest files for the selected extension.
+- Print a selected-extension detail table after pressing Enter.
+- Respect existing filters such as `--include`, `--exclude`, `--type`, `--limit`, `--min-size`, and `--min-share` in interactive mode.
+- Add `SIZES_FZF` for overriding the `fzf` command.
 
 ## Release checklist
 
@@ -14,7 +14,7 @@
 sh tests/run.sh
 shellcheck sizes.sh sizes tests/run.sh
 git add -A
-git commit -m "Add directory drilldown and JSON reports for v0.4.0"
-git tag -f v0.4.0
+git commit -m "Add fzf interactive browser for v0.5.0"
+git tag -f v0.5.0
 git push origin master --tags
 ```

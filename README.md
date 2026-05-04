@@ -6,7 +6,7 @@
 disk usage by extension
 ```
 
-`sizes` scans a directory and prints a compact summary grouped by file extension or file type.
+`sizes` scans a directory and prints a compact summary grouped by file extension or file type. It can also browse results interactively with `fzf`.
 
 ## Install
 
@@ -14,7 +14,7 @@ disk usage by extension
 mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/sevenreasons/sizes/master/sizes.sh -o ~/.local/bin/sizes && chmod +x ~/.local/bin/sizes
 ```
 
-Requires GNU `find` because `sizes` uses `find -printf`.
+Requires GNU `find` because `sizes` uses `find -printf`. `--interactive` also requires `fzf`.
 Linux usually has it already. On macOS, install GNU findutils:
 
 ```sh
@@ -63,6 +63,7 @@ sizes -r --top-files mp4           # largest files for extension
 sizes -r --top-dirs                # directories using the most space
 sizes -r --top-dirs mp4            # directories using the most MP4 space
 sizes -r --by-dir                  # summarize by immediate child directory
+sizes -r --interactive             # browse extension summary with fzf
 sizes -r --sort files              # sort by file count
 sizes -r --group-by type           # summarize by type instead of extension
 sizes -r --format json             # table, tsv, csv, json
@@ -71,7 +72,7 @@ sizes --plain                      # simple ASCII table
 sizes --no-progress                # disable scan spinner
 sizes --upgrade --check            # check available upgrade
 sizes --upgrade                    # self-upgrade installed script
-sizes --upgrade --version v0.3.0   # install a tagged version
+sizes --upgrade --version v0.4.0   # install a tagged version
 sizes --no-color                   # no ANSI colors
 ```
 
@@ -94,6 +95,7 @@ sizes --no-color                   # no ANSI colors
     --top-files EXT      show largest files for an extension
     --top-dirs [EXT]     show directories using the most space, optionally for EXT
     --by-dir             summarize by immediate child directory
+-i, --interactive        browse extension summary interactively with fzf
     --sort FIELD         size, files, share, ext, type
     --format FORMAT      table, tsv, csv, json
     --save PATH          write output to PATH; infers format from .json/.csv/.tsv
@@ -119,9 +121,10 @@ sizes --no-color                   # no ANSI colors
 - `--include` filters are pushed into `find` where possible, reducing work on large trees.
 - `--top-files` streams candidates through `sort` instead of storing all matches in memory.
 - `--top-dirs` and `--by-dir` help locate where space is coming from.
+- `--interactive` opens an `fzf` browser with a preview pane for top files per extension.
 - JSON output includes metadata such as version, root, mode, elapsed time, skipped paths, partial status, totals, and rows.
 - `--save` writes the selected output directly to a file and infers JSON/CSV/TSV from the filename.
-- Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, and `SIZES_UPGRADE_URL=...`.
+- Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, `SIZES_FZF=...`, and `SIZES_UPGRADE_URL=...`.
 
 ## Completions
 

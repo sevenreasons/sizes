@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+- Add `--interactive` / `-i` for an `fzf`-powered extension browser.
+- Add an interactive preview pane showing the largest files for the selected extension.
+- Print a selected-extension detail table after pressing Enter.
+- Respect existing filters such as `--include`, `--exclude`, `--type`, `--limit`, `--min-size`, and `--min-share` in interactive mode.
+- Add `SIZES_FZF` for overriding the `fzf` command.
+- Update completions and tests.
+
 ## 0.4.0
 
 - Add `--top-dirs [EXT]` to show directories using the most space, optionally filtered by extension.

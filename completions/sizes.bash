@@ -59,7 +59,7 @@ _sizes_completion() {
     esac
 
     if [[ "$cur" == -* ]]; then
-        COMPREPLY=( $(compgen -W '-r --recursive --depth --follow -x --one-file-system --max-files -n --limit --min-size --min-share -e --exact -E --errors --include --exclude --type --top-files --top-dirs --by-dir --sort --format --save --group-by --plain --no-progress --no-color --upgrade --check --version -h --help' -- "$cur") )
+        COMPREPLY=( $(compgen -W '-r --recursive --depth --follow -x --one-file-system --max-files -n --limit --min-size --min-share -e --exact -E --errors --include --exclude --type --top-files --top-dirs --by-dir -i --interactive --sort --format --save --group-by --plain --no-progress --no-color --upgrade --check --version -h --help' -- "$cur") )
         return 0
     fi
 

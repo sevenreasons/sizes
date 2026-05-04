@@ -26,3 +26,9 @@ sizes . — recursive
 │ TOTAL        │      15.75 GiB │       200 │  100.00% │ ██████████████████ │
 ╰──────────────┴────────────────┴───────────┴──────────┴────────────────────╯
 Scanned: 200 files · 15.75 GiB · 1s
+
+Interactive mode:
+
+  sizes -r --interactive
+
+Browse extension summaries with fzf and preview the largest files for the selected extension.

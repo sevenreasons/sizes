@@ -18,6 +18,7 @@ export extern sizes [
     --top-files: string      # Show largest files for extension
     --top-dirs: string       # Show directories using the most space, optionally for extension
     --by-dir                 # Summarize by immediate child directory
+    --interactive(-i)        # Browse extension summary interactively with fzf
     --sort: string           # Sort by size, files, share, ext, or type
     --format: string         # Output table, tsv, csv, or json
     --save: path             # Save output to file

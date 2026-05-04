@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.4.0"
+VERSION="0.5.0"
 
 usage() {
     cat <<'USAGE'
@@ -30,6 +30,7 @@ Options:
       --top-files EXT      Show largest files for an extension instead of summary rows.
       --top-dirs [EXT]     Show directories using the most space, optionally for EXT.
       --by-dir             Summarize usage by immediate child directory.
+  -i, --interactive        Browse extension summary interactively with fzf.
       --sort FIELD         Sort by size, files, share, ext, or type. Default: size.
       --format FORMAT      Output table, tsv, csv, or json. Default: table.
       --save PATH          Save output to a file. Infers format from .json/.csv/.tsv.
@@ -49,7 +50,8 @@ Environment:
   SIZES_FIND=/path/to/find Override find command.
   SIZES_UPGRADE_URL=URL    Override --upgrade download source.
   SIZES_UPGRADE_TARGET=PATH Override --upgrade target path.
-  SIZES_DEBUG_TIMING=1  Print coarse timing diagnostics to stderr.
+  SIZES_DEBUG_TIMING=1     Print coarse timing diagnostics to stderr.
+  SIZES_FZF=/path/to/fzf   Override fzf command for --interactive.
 
 Examples:
   sizes
@@ -66,12 +68,13 @@ Examples:
   sizes -r --top-dirs
   sizes -r --top-dirs mp4
   sizes -r --by-dir
+  sizes -r --interactive
   sizes -r --group-by type
   sizes -r --format json
   sizes -r --save report.json
   sizes --plain
   sizes --upgrade --check
-  sizes --upgrade --version v0.3.0
+  sizes --upgrade --version v0.4.0
 USAGE
 }
 
@@ -253,6 +256,7 @@ top_files=""
 top_dirs=0
 top_dirs_ext=""
 by_dir=0
+interactive=0
 save_path=""
 include_data=""
 include_count=0
@@ -402,6 +406,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --by-dir)
             by_dir=1
+            shift
+            ;;
+        -i|--interactive)
+            interactive=1
             shift
             ;;
         --min-size)
@@ -573,8 +581,9 @@ mode_count=0
 [ "$top_files" != "" ] && mode_count=$((mode_count + 1))
 [ "$top_dirs" -eq 1 ] && mode_count=$((mode_count + 1))
 [ "$by_dir" -eq 1 ] && mode_count=$((mode_count + 1))
+[ "$interactive" -eq 1 ] && mode_count=$((mode_count + 1))
 if [ "$mode_count" -gt 1 ]; then
-    fail "--top-files, --top-dirs, and --by-dir are mutually exclusive"
+    fail "--top-files, --top-dirs, --by-dir, and --interactive are mutually exclusive"
 fi
 
 if [ "$save_path" != "" ] && [ "$format_seen" -eq 0 ]; then
@@ -583,6 +592,12 @@ if [ "$save_path" != "" ] && [ "$format_seen" -eq 0 ]; then
         *.csv|*.CSV) format="csv" ;;
         *.tsv|*.TSV) format="tsv" ;;
     esac
+fi
+
+if [ "$interactive" -eq 1 ]; then
+    [ "$save_path" = "" ] || fail "--interactive cannot be used with --save"
+    [ "$format" = "table" ] || fail "--interactive cannot be used with --format"
+    [ "$group_by" = "ext" ] || fail "--interactive currently supports --group-by ext only"
 fi
 
 if [ "$format" != "table" ]; then
@@ -1294,6 +1309,247 @@ generate() {
     fi
 }
 
+
+# shellcheck disable=SC2016
+generate_interactive_data() {
+    records_file=$1
+
+    scan_stream \
+    | awk -v RS='\0' -F"$field_sep" \
+        -v merge="$merge" \
+        -v dir="$dir" \
+        -v excludes="$exclude_data" \
+        -v includes="$include_data" \
+        -v typedata="$type_data" \
+        -v records_file="$records_file" \
+        -v OFS="$field_sep" \
+        "$common_awk_functions"'
+        BEGIN {
+            nex = split(excludes, ex, "\034")
+            ninc = split(includes, inc, "\034")
+            ntypes = split(typedata, types, "\034")
+        }
+        NF >= 3 {
+            size = $1 + 0; path = $2; base = $3
+            if (excluded(path, base) || !included(path, base)) next
+            ext = cached_extname(base); k = cached_kind(ext)
+            if (!allowed_type(k)) next
+
+            bytes[ext] += size
+            count[ext] += 1
+            type_for[ext] = k
+            total += size
+            total_count += 1
+
+            printf "%.0f%s%s%s%s%s%s\n", size, OFS, path, OFS, ext, OFS, k >> records_file
+        }
+        END {
+            close(records_file)
+            for (e in bytes) {
+                share = total ? bytes[e] * 100 / total : 0
+                sortkey = bytes[e]
+                printf "%s%s%.0f%s%d%s%s%s%s%s%.0f%s%d\n", sortkey, OFS, bytes[e], OFS, count[e], OFS, e, OFS, type_for[e], OFS, total, OFS, total_count
+            }
+        }' \
+    | sort_records \
+    | awk -F"$field_sep" \
+        -v limit="$limit" \
+        -v min_size="$min_size" \
+        -v min_share="$min_share" '
+        function human(n,    u, units) {
+            split("B KiB MiB GiB TiB PiB", units, " ")
+            u = 1
+            while (n >= 1024 && u < 6) { n /= 1024; u++ }
+            if (u == 1) return sprintf("%.0f %s", n, units[u])
+            return sprintf("%.2f %s", n, units[u])
+        }
+        BEGIN { limited = limit + 0 > 0 }
+        {
+            seen = 1
+            bytes = $2 + 0
+            files = $3 + 0
+            ext = $4
+            k = $5
+            total_bytes = $6 + 0
+            total_count = $7 + 0
+            share = total_bytes ? bytes * 100 / total_bytes : 0
+            filtered = ((min_size + 0 > 0 && bytes < min_size) || (min_share + 0 >= 0 && share < min_share))
+            if (!filtered && (!limited || shown < limit)) {
+                printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", ext, k, bytes, human(bytes), files, share
+                shown++
+            } else {
+                other_bytes += bytes
+                other_count += files
+                other_types++
+            }
+        }
+        END {
+            if (other_types > 0) {
+                share = total_bytes ? other_bytes * 100 / total_bytes : 0
+                printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", "OTHER", "mixed", other_bytes, human(other_bytes), other_count, share
+            }
+            if (seen) printf "%s\t%s\t%.0f\t%s\t%d\t%.2f\n", "TOTAL", "all", total_bytes, human(total_bytes), total_count, 100
+        }'
+}
+
+write_interactive_preview_script() {
+    preview_script=$1
+    cat >"$preview_script" <<'PREVIEW'
+#!/usr/bin/env sh
+set -eu
+
+records_file=$1
+ext=$2
+field_sep=$(printf '\037')
+
+if [ "$ext" = "" ] || [ "$ext" = "TOTAL" ]; then
+    printf '%s\n' 'Select an extension to preview its largest files.'
+    exit 0
+fi
+
+if [ "$ext" = "OTHER" ]; then
+    printf '%s\n' 'OTHER is a folded summary row.'
+    printf '%s\n' 'Use a higher --limit or remove min filters to inspect specific extensions.'
+    exit 0
+fi
+
+awk -F"$field_sep" -v target="$ext" '
+    toupper($3) == toupper(target) { print $0 }
+' "$records_file" \
+| LC_ALL=C sort -t "$field_sep" -k1,1nr \
+| awk -F"$field_sep" -v target="$ext" '
+    function human(n,    u, units) {
+        split("B KiB MiB GiB TiB PiB", units, " ")
+        u = 1
+        while (n >= 1024 && u < 6) { n /= 1024; u++ }
+        if (u == 1) return sprintf("%9.0f %s", n, units[u])
+        return sprintf("%9.2f %s", n, units[u])
+    }
+    function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+    BEGIN {
+        top = "╭────────────────┬──────────┬────────────────────────────────────────────────────────────╮"
+        mid = "├────────────────┼──────────┼────────────────────────────────────────────────────────────┤"
+        bottom = "╰────────────────┴──────────┴────────────────────────────────────────────────────────────╯"
+        print "Top files for " target
+        print top
+        printf "│ %14s │ %-8s │ %-58s │\n", "SIZE", "TYPE", "PATH"
+        print mid
+    }
+    NR <= 20 {
+        seen = 1
+        printf "│ %14s │ %-8s │ %-58s │\n", human($1), $4, clip($2, 58)
+    }
+    END {
+        if (!seen) printf "│ %14s │ %-8s │ %-58s │\n", "-", "-", "No matching files"
+        print bottom
+    }'
+PREVIEW
+    chmod +x "$preview_script"
+}
+
+run_interactive_scan() {
+    summary_file=$1
+    records_file=$2
+
+    if [ "$progress" -eq 1 ]; then
+        progress_count_file=$(mktemp "${TMPDIR:-/tmp}/sizes-progress.XXXXXX") || exit 1
+        progress_err=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-stderr.XXXXXX") || exit 1
+
+        generate_interactive_data "$records_file" >"$summary_file" 2>"$progress_err" &
+        progress_pid=$!
+        progress_i=0
+
+        while kill -0 "$progress_pid" 2>/dev/null; do
+            progress_i=$((progress_i + 1))
+            case $((progress_i % 4)) in
+                0) progress_ch='-' ;;
+                1) progress_ch="\\" ;;
+                2) progress_ch='|' ;;
+                *) progress_ch='/' ;;
+            esac
+            progress_count=""
+            if [ -s "$progress_count_file" ]; then
+                progress_count=$(tail -n 1 "$progress_count_file" 2>/dev/null | tr -cd '0-9' || printf '')
+            fi
+            case "$progress_count" in
+                ''|*[!0-9]*) printf '\rsizes: scanning %s (%s) %s' "$dir" "$mode" "$progress_ch" >&2 ;;
+                *) printf '\rsizes: scanning %s (%s) %s %s files' "$dir" "$mode" "$progress_ch" "$progress_count" >&2 ;;
+            esac
+            sleep 0.1
+        done
+
+        wait "$progress_pid"
+        progress_status=$?
+        printf '\r%120s\r' ' ' >&2
+        cat "$progress_err" >&2
+        rm -f "$progress_err"
+        return "$progress_status"
+    fi
+
+    generate_interactive_data "$records_file" >"$summary_file"
+}
+
+run_interactive() {
+    fzf_cmd=${SIZES_FZF:-fzf}
+    if ! command -v "$fzf_cmd" >/dev/null 2>&1; then
+        printf '%s\n' 'sizes: --interactive requires fzf. Install fzf or set SIZES_FZF=/path/to/fzf.' >&2
+        exit 1
+    fi
+
+    summary_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-summary.XXXXXX") || exit 1
+    records_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-records.XXXXXX") || exit 1
+    preview_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-preview.XXXXXX") || exit 1
+
+    write_interactive_preview_script "$preview_script"
+
+    if ! run_interactive_scan "$summary_file" "$records_file"; then
+        rm -f "$summary_file" "$records_file" "$preview_script"
+        exit 1
+    fi
+
+    if [ ! -s "$summary_file" ]; then
+        printf '%s\n' 'sizes: no files found'
+        print_errors
+        rm -f "$summary_file" "$records_file" "$preview_script"
+        return 0
+    fi
+
+    selected=$("$fzf_cmd" \
+        --ansi \
+        --delimiter='\t' \
+        --with-nth=1,2,4,5,6 \
+        --header='EXT          TYPE       SIZE        FILES    SHARE     / search · Enter preview selection · Esc quit' \
+        --prompt='sizes> ' \
+        --preview="$preview_script '$records_file' {1}" \
+        --preview-window='right:65%:wrap' \
+        --height='85%' \
+        --border \
+        <"$summary_file" || true)
+
+    if [ "$selected" != "" ]; then
+        selected_ext=$(printf '%s\n' "$selected" | awk -F'\t' '{ print $1 }')
+        printf '%s\n' "$selected" | awk -F'\t' '
+            BEGIN {
+                top = "╭──────────────┬──────────┬────────────────┬───────────┬──────────╮"
+                mid = "├──────────────┼──────────┼────────────────┼───────────┼──────────┤"
+                bottom = "╰──────────────┴──────────┴────────────────┴───────────┴──────────╯"
+                print "sizes — selected extension"
+                print top
+                printf "│ %-12s │ %-8s │ %14s │ %9s │ %8s │\n", "EXT", "TYPE", "SIZE", "FILES", "SHARE"
+                print mid
+            }
+            {
+                printf "│ %-12s │ %-8s │ %14s │ %9s │ %7.2f%% │\n", $1, $2, $4, $5, $6
+            }
+            END { print bottom }'
+        printf '\n'
+        "$preview_script" "$records_file" "$selected_ext"
+    fi
+
+    print_errors
+    rm -f "$summary_file" "$records_file" "$preview_script"
+}
+
 run_with_progress() {
     progress_out=$(mktemp "${TMPDIR:-/tmp}/sizes-output.XXXXXX") || exit 1
     progress_err=$(mktemp "${TMPDIR:-/tmp}/sizes-stderr.XXXXXX") || exit 1
@@ -1335,6 +1591,8 @@ run_with_progress() {
 
 if [ "$save_path" != "" ]; then
     generate >"$save_path"
+elif [ "$interactive" -eq 1 ]; then
+    run_interactive
 elif [ "$progress" -eq 1 ]; then
     run_with_progress
 else
