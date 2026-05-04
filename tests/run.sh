@@ -70,11 +70,11 @@ OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.6\.1$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.6\.2$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.6\.1$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.6\.2$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -125,10 +125,10 @@ ok 'CLICOLOR=0'
 UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
 UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
 cp "$SIZES" "$UPGRADE_TARGET"
-sed 's/VERSION="0.6.1"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+sed 's/VERSION="0.6.2"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
 chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes: upgraded .+ from 0\.6\.1 to 9\.9\.9' '--upgrade reports old and new version'
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.6\.2 to 9\.9\.9' '--upgrade reports old and new version'
 "$UPGRADE_TARGET" --version >"$OUT"
 assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
 ok '--upgrade'
@@ -213,14 +213,14 @@ assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'follow keeps normal recur
 ok '--follow'
 
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" "$SIZES" --upgrade --check >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'current 0\.6\.1, available 9\.9\.9' 'upgrade check reports available version'
+assert_contains "$OUT" 'current 0\.6\.2, available 9\.9\.9' 'upgrade check reports available version'
 ok '--upgrade --check'
 
 UPGRADE_TARGET_VERSIONED="$TEST_ROOT/upgradable-versioned-sizes"
 cp "$SIZES" "$UPGRADE_TARGET_VERSIONED"
 chmod +x "$UPGRADE_TARGET_VERSIONED"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET_VERSIONED" "$UPGRADE_TARGET_VERSIONED" --upgrade --version v9.9.9 >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'from 0\.6\.1 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
+assert_contains "$OUT" 'from 0\.6\.2 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
 ok '--upgrade --version'
 
 
@@ -271,25 +271,38 @@ cat >"$FAKE_BIN/fzf" <<'FAKEFZF'
 if [ "${FZF_ARGS_LOG:-}" != "" ]; then
     printf '%s\n' "$*" >>"$FZF_ARGS_LOG"
 fi
-sed -n '1p'
+state=${FZF_STATE_FILE:-/tmp/sizes-fake-fzf-state}
+n=0
+[ -f "$state" ] && n=$(cat "$state")
+n=$((n + 1))
+printf '%s\n' "$n" >"$state"
+case "$n" in
+    1|2|3) sed -n '1p' ;;
+    4) sed -n '5p' ;;
+    *) exit 130 ;;
+esac
 FAKEFZF
 chmod +x "$FAKE_BIN/fzf"
 
 FZF_ARGS_LOG="$TEST_ROOT/fzf-args.log"
-env NO_COLOR=1 FZF_ARGS_LOG="$FZF_ARGS_LOG" PATH="$FAKE_BIN:$PATH" "$SIZES" -r --interactive --no-progress "$SAMPLE" >"$OUT" 2>"$ERR"
+FZF_STATE_FILE="$TEST_ROOT/fzf-state"
+env NO_COLOR=1 FZF_ARGS_LOG="$FZF_ARGS_LOG" FZF_STATE_FILE="$FZF_STATE_FILE" PATH="$FAKE_BIN:$PATH" "$SIZES" -r --interactive --no-progress "$SAMPLE" >"$OUT" 2>"$ERR"
 assert_contains "$OUT" 'sizes — selected file' 'interactive mode lets users select an individual file'
 assert_contains "$OUT" 'junk\.mp4|video\.mp4' 'interactive file browser prints selected file path'
 assert_contains "$FZF_ARGS_LOG" '--layout=reverse' 'interactive mode keeps headers at the top'
 assert_not_contains "$FZF_ARGS_LOG" '--layout=reverse-list' 'interactive mode should not put headers at the bottom'
 assert_contains "$FZF_ARGS_LOG" 'preview-down' 'interactive mode binds preview scrolling'
-assert_contains "$FZF_ARGS_LOG" 'sizes interactive' 'interactive mode starts with a mode menu'
-assert_contains "$FZF_ARGS_LOG" 'ext> ' 'interactive mode opens the extension browser'
-assert_contains "$FZF_ARGS_LOG" 'files> ' 'interactive mode opens a selectable file browser'
+assert_contains "$FZF_ARGS_LOG" 'sizes › main' 'interactive mode starts with a breadcrumbed mode menu'
+assert_contains "$FZF_ARGS_LOG" 'sizes › extensions' 'interactive mode opens the extension browser'
+assert_contains "$FZF_ARGS_LOG" 'sizes › files' 'interactive mode opens a selectable file browser'
 assert_contains "$FZF_ARGS_LOG" 'ctrl-o:execute-silent' 'interactive file browser can open selected files'
 assert_contains "$FZF_ARGS_LOG" 'ctrl-p:execute-silent' 'interactive file browser can open parent folders'
 assert_contains "$FZF_ARGS_LOG" 'ctrl-y:execute-silent' 'interactive file browser can copy paths'
 assert_contains "$FZF_ARGS_LOG" '--multi' 'interactive file browser supports multi-select'
-assert_contains "$FZF_ARGS_LOG" 'action> ' 'interactive file browser opens an action menu'
+assert_contains "$FZF_ARGS_LOG" 'ctrl-b:abort' 'interactive mode supports back navigation'
+assert_contains "$FZF_ARGS_LOG" 'ctrl-q:execute-silent' 'interactive mode supports global quit'
+assert_contains "$FZF_ARGS_LOG" 'Ctrl-R refresh' 'interactive mode exposes refresh/rescan'
+assert_contains "$FZF_ARGS_LOG" 'sizes › file › action' 'interactive file browser opens an action menu'
 assert_contains "$FZF_ARGS_LOG" 'right:(45|55)%:wrap|down:45%:wrap' 'interactive preview is terminal-size aware'
 ok '--interactive'
 

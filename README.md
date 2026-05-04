@@ -123,7 +123,10 @@ sizes --no-color                   # no ANSI colors
 - `--top-dirs` and `--by-dir` help locate where space is coming from.
 - `--interactive` opens a mode menu instead of dropping directly into rows. Browse extensions, types, top files, top directories, or directory summaries.
 - Interactive extension/type previews show compact summaries with top directories and top files. Press `Enter` or `Ctrl-F` to open a selectable file browser; press `Ctrl-D` for directories; press `?` for help.
+- Interactive mode behaves like a navigable drilldown flow: `Esc`/`Ctrl-B` goes back one menu, `Ctrl-Q` quits, and breadcrumbs show the current location.
 - Interactive file browser supports `Tab` multi-select, `Ctrl-O` open file, `Ctrl-P` open containing folder, `Ctrl-Y` copy path, and an action menu after `Enter`.
+- Interactive directory browser has an action menu with open, copy, print details, print path, and browse files in directory actions.
+- Interactive main menu supports `Refresh scan` / `Ctrl-R` to rescan with the same options.
 - Interactive previews are terminal-size aware. Use `Alt-J/K` to scroll previews, `Alt-U/D` to page them, and `Alt-T/B` for top/bottom.
 - Optional image previews are available with `SIZES_IMAGE_PREVIEW=1` when `chafa`, `viu`, `kitty`, `wezterm`, or `imgcat` is installed.
 - JSON output includes metadata such as version, root, mode, elapsed time, skipped paths, partial status, totals, and rows.

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.2
+
+- Add back navigation in interactive mode with `Esc` and `Ctrl-B`.
+- Add `Ctrl-Q` to quit interactive mode from nested views.
+- Add breadcrumb prompts for the main menu, extension/type browsers, file browser, directory browser, and action menus.
+- Preserve the selected row when returning from drilldown views.
+- Make `Enter` behavior consistent by opening action menus in file and directory browsers.
+- Improve file and directory action menus with clearer safe actions.
+- Add `Browse files in directory` to the directory action menu.
+- Add clearer empty-state screens for empty file, directory, and type drilldowns.
+- Add `Refresh scan` / `Ctrl-R` to rescan from the interactive main menu.
+- Update interactive help and tests.
+
 ## 0.6.1
 
 - Fix interactive start menu spacing so labels and descriptions render as separate aligned text.

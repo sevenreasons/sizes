@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.6.1"
+VERSION="0.6.2"
 
 usage() {
     cat <<'USAGE'
@@ -1469,20 +1469,30 @@ Main menu
   Top directories browse largest directories overall
   By directory    browse directory summaries
 
+Navigation
+  Esc      go back one menu
+  Ctrl-B   go back one menu
+  Ctrl-Q   quit interactive mode
+  Ctrl-R   refresh/rescan from the main menu
+
 Extension / type browsers
   /        search
-  Enter    open selectable files
+  Enter    open selectable files / extensions
   Ctrl-F   open selectable files
   Ctrl-D   open selectable directories
   ?        show help preview
-  Esc      go back / quit
 
 File browser
   Tab      mark multiple files
-  Enter    action menu / print selected paths
+  Enter    action menu
   Ctrl-O   open selected file
   Ctrl-P   open containing folder
   Ctrl-Y   copy selected path
+
+Directory browser
+  Enter    action menu
+  Ctrl-O   open directory
+  Ctrl-Y   copy path
 
 Preview
   Alt-J/K  scroll down/up
@@ -1944,6 +1954,35 @@ interactive_preview_window() {
     fi
 }
 
+interactive_quit_requested() {
+    [ "${interactive_quit_file:-}" != "" ] && [ -f "$interactive_quit_file" ]
+}
+
+interactive_common_bindings() {
+    printf '%s' "ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort,alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom"
+}
+
+run_interactive_empty_state() {
+    fzf_cmd=$1
+    title=$2
+    message=$3
+
+    empty_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-empty.XXXXXX") || exit 1
+    printf '%s\n' "$message" >"$empty_file"
+    "$fzf_cmd" \
+        --ansi \
+        --no-sort \
+        --header="$title" \
+        --prompt='back> ' \
+        --layout=reverse \
+        --info=inline-right \
+        --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort" \
+        --height='50%' \
+        --border \
+        <"$empty_file" >/dev/null 2>&1 || true
+    rm -f "$empty_file"
+}
+
 run_file_action_menu() {
     fzf_cmd=$1
     selected_file=$2
@@ -1951,15 +1990,29 @@ run_file_action_menu() {
 
     action_file=$(mktemp "${TMPDIR:-/tmp}/sizes-file-actions.XXXXXX") || exit 1
     cat >"$action_file" <<EOF
-print${field_sep}Print details
 open${field_sep}Open file
 folder${field_sep}Open containing folder
 copy${field_sep}Copy path
 path${field_sep}Print path
+details${field_sep}Print details
 back${field_sep}Back
 EOF
-    choice=$("$fzf_cmd" --ansi --no-sort --delimiter="$field_sep" --with-nth=2 --header='sizes file actions' --prompt='action> ' --height='50%' --border <"$action_file" || true)
+    choice=$("$fzf_cmd" \
+        --ansi \
+        --no-sort \
+        --delimiter="$field_sep" \
+        --with-nth=2 \
+        --header='sizes › file actions' \
+        --prompt='sizes › file › action> ' \
+        --layout=reverse \
+        --height='50%' \
+        --border \
+        --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort" \
+        <"$action_file" || true)
     rm -f "$action_file"
+
+    interactive_quit_requested && return 0
+
     action=$(printf '%s\n' "$choice" | awk -F"$field_sep" '{print $1}')
     path=$(printf '%s\n' "$selected_file" | awk -F"$field_sep" '{print $1}')
     case "$action" in
@@ -1967,7 +2020,8 @@ EOF
         folder) "$open_script" "$path" parent ;;
         copy) "$open_script" "$path" copy ;;
         path) printf '%s\n' "$path" ;;
-        print|'') print_selected_file "$selected_file" ;;
+        details) print_selected_file "$selected_file" ;;
+        back|'') : ;;
         *) : ;;
     esac
 }
@@ -1976,24 +2030,48 @@ run_dir_action_menu() {
     fzf_cmd=$1
     selected_dir=$2
     open_script=$3
+    records_file=$4
+    item_preview_script=$5
 
     action_file=$(mktemp "${TMPDIR:-/tmp}/sizes-dir-actions.XXXXXX") || exit 1
     cat >"$action_file" <<EOF
-print${field_sep}Print details
 open${field_sep}Open directory
+browse${field_sep}Browse files in directory
 copy${field_sep}Copy path
 path${field_sep}Print path
+details${field_sep}Print details
 back${field_sep}Back
 EOF
-    choice=$("$fzf_cmd" --ansi --no-sort --delimiter="$field_sep" --with-nth=2 --header='sizes directory actions' --prompt='action> ' --height='50%' --border <"$action_file" || true)
+    choice=$("$fzf_cmd" \
+        --ansi \
+        --no-sort \
+        --delimiter="$field_sep" \
+        --with-nth=2 \
+        --header='sizes › directory actions' \
+        --prompt='sizes › dir › action> ' \
+        --layout=reverse \
+        --height='50%' \
+        --border \
+        --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort" \
+        <"$action_file" || true)
     rm -f "$action_file"
+
+    interactive_quit_requested && return 0
+
     action=$(printf '%s\n' "$choice" | awk -F"$field_sep" '{print $1}')
     path=$(printf '%s\n' "$selected_dir" | awk -F"$field_sep" '{print $1}')
     case "$action" in
         open) "$open_script" "$path" open-dir ;;
+        browse)
+            tmp_records=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-dir-records.XXXXXX") || exit 1
+            awk -F"$field_sep" -v p="$path" '($2 == p || index($2, p "/") == 1) { print }' "$records_file" >"$tmp_records"
+            run_interactive_file_browser "$fzf_cmd" "$tmp_records" TOTAL "$item_preview_script" "$open_script"
+            rm -f "$tmp_records"
+            ;;
         copy) "$open_script" "$path" copy ;;
         path) printf '%s\n' "$path" ;;
-        print|'') print_selected_dir "$selected_dir" ;;
+        details) print_selected_dir "$selected_dir" ;;
+        back|'') : ;;
         *) : ;;
     esac
 }
@@ -2006,50 +2084,58 @@ run_interactive_file_browser() {
     open_script=$5
 
     if [ "$ext" = "OTHER" ]; then
-        printf '%s\n' 'sizes: OTHER is a folded summary row. Increase --limit or remove filters to inspect files.' >&2
-        return 0
-    fi
-
-    file_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-files.XXXXXX") || exit 1
-    make_interactive_file_list "$records_file" "$ext" "$file_list"
-
-    if [ ! -s "$file_list" ]; then
-        rm -f "$file_list"
-        printf '%s\n' 'sizes: no matching files'
+        run_interactive_empty_state "$fzf_cmd" 'sizes › files' 'OTHER is a folded summary row. Increase --limit or remove filters to inspect files.'
         return 0
     fi
 
     label=$ext
     case "$ext" in TYPE:*) label=${ext#TYPE:} ;; esac
-    preview_window=$(interactive_preview_window)
-    title=$(printf 'sizes files — %s · Tab multi · Enter actions · Ctrl-O open · Ctrl-P folder · Ctrl-Y copy · Esc back' "$label")
-    fzf_out=$("$fzf_cmd" \
-        --ansi \
-        --no-sort \
-        --multi \
-        --cycle \
-        --expect=enter,ctrl-o,ctrl-p,ctrl-y \
-        --delimiter="$field_sep" \
-        --with-nth=2 \
-        --header="$title" \
-        --prompt='files> ' \
-        --layout=reverse \
-        --info=inline-right \
-        --preview="$item_preview_script file {1} {6} {4} {3}" \
-        --bind="ctrl-o:execute-silent($open_script {1} open),ctrl-p:execute-silent($open_script {1} parent),ctrl-y:execute-silent($open_script {1} copy),alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom" \
-        --preview-window="$preview_window" \
-        --height='95%' \
-        --border \
-        <"$file_list" || true)
+    query=
 
-    rm -f "$file_list"
+    while ! interactive_quit_requested; do
+        file_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-files.XXXXXX") || exit 1
+        make_interactive_file_list "$records_file" "$ext" "$file_list"
 
-    if [ "$fzf_out" != "" ]; then
+        if [ ! -s "$file_list" ]; then
+            rm -f "$file_list"
+            run_interactive_empty_state "$fzf_cmd" "sizes › files › $label" "No matching files for $label. Esc/Ctrl-B: back · Ctrl-Q: quit."
+            return 0
+        fi
+
+        preview_window=$(interactive_preview_window)
+        title=$(printf 'sizes › files › %s · Tab multi · Enter actions · Ctrl-O open · Ctrl-P folder · Ctrl-Y copy · Ctrl-B/Esc back · Ctrl-Q quit' "$label")
+        common_bindings=$(interactive_common_bindings)
+        fzf_out=$("$fzf_cmd" \
+            --ansi \
+            --no-sort \
+            --multi \
+            --cycle \
+            --expect=enter,ctrl-o,ctrl-p,ctrl-y \
+            --delimiter="$field_sep" \
+            --with-nth=2 \
+            --header="$title" \
+            --prompt="sizes › files › $label> " \
+            --query="$query" \
+            --layout=reverse \
+            --info=inline-right \
+            --preview="$item_preview_script file {1} {6} {4} {3}" \
+            --bind="ctrl-o:execute-silent($open_script {1} open),ctrl-p:execute-silent($open_script {1} parent),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
+            --preview-window="$preview_window" \
+            --height='95%' \
+            --border \
+            <"$file_list" || true)
+
+        rm -f "$file_list"
+        interactive_quit_requested && return 0
+        [ "$fzf_out" = "" ] && return 0
+
         parsed=$(interactive_select_parts "$fzf_out")
         key=$(printf '%s\n' "$parsed" | sed -n '1p')
         selected=$(printf '%s\n' "$parsed" | sed -n '2,$p' | sed '/^$/d')
         first_selected=$(printf '%s\n' "$selected" | sed -n '1p')
         first_path=$(printf '%s\n' "$first_selected" | awk -F"$field_sep" '{ print $1 }')
+        [ "$first_path" != "" ] && query=$(basename -- "$first_path")
+
         case "$key" in
             ctrl-o) [ "$first_path" != "" ] && "$open_script" "$first_path" open ;;
             ctrl-p) [ "$first_path" != "" ] && "$open_script" "$first_path" parent ;;
@@ -2062,7 +2148,7 @@ run_interactive_file_browser() {
                 fi
                 ;;
         esac
-    fi
+    done
 }
 
 run_interactive_dir_browser() {
@@ -2073,54 +2159,61 @@ run_interactive_dir_browser() {
     open_script=$5
 
     if [ "$ext" = "OTHER" ]; then
-        printf '%s\n' 'sizes: OTHER is a folded summary row. Increase --limit or remove filters to inspect directories.' >&2
-        return 0
-    fi
-
-    dir_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-dirs.XXXXXX") || exit 1
-    make_interactive_dir_list "$records_file" "$ext" "$dir_list"
-
-    if [ ! -s "$dir_list" ]; then
-        rm -f "$dir_list"
-        printf '%s\n' 'sizes: no matching directories'
+        run_interactive_empty_state "$fzf_cmd" 'sizes › dirs' 'OTHER is a folded summary row. Increase --limit or remove filters to inspect directories.'
         return 0
     fi
 
     label=$ext
     case "$ext" in TYPE:*) label=${ext#TYPE:} ;; esac
-    preview_window=$(interactive_preview_window)
-    title=$(printf 'sizes directories — %s · / search · Enter actions · Ctrl-O open · Ctrl-Y copy · Esc back' "$label")
-    fzf_out=$("$fzf_cmd" \
-        --ansi \
-        --no-sort \
-        --cycle \
-        --expect=enter,ctrl-o,ctrl-y \
-        --delimiter="$field_sep" \
-        --with-nth=2 \
-        --header="$title" \
-        --prompt='dirs> ' \
-        --layout=reverse \
-        --info=inline-right \
-        --preview="$item_preview_script dir {1} {6} {4} {3} {7}" \
-        --bind="ctrl-o:execute-silent($open_script {1} open-dir),ctrl-y:execute-silent($open_script {1} copy),alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom" \
-        --preview-window="$preview_window" \
-        --height='95%' \
-        --border \
-        <"$dir_list" || true)
+    query=
 
-    rm -f "$dir_list"
+    while ! interactive_quit_requested; do
+        dir_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-dirs.XXXXXX") || exit 1
+        make_interactive_dir_list "$records_file" "$ext" "$dir_list"
 
-    if [ "$fzf_out" != "" ]; then
+        if [ ! -s "$dir_list" ]; then
+            rm -f "$dir_list"
+            run_interactive_empty_state "$fzf_cmd" "sizes › dirs › $label" "No matching directories for $label. Esc/Ctrl-B: back · Ctrl-Q: quit."
+            return 0
+        fi
+
+        preview_window=$(interactive_preview_window)
+        title=$(printf 'sizes › dirs › %s · Enter actions · Ctrl-O open · Ctrl-Y copy · Ctrl-B/Esc back · Ctrl-Q quit' "$label")
+        common_bindings=$(interactive_common_bindings)
+        fzf_out=$("$fzf_cmd" \
+            --ansi \
+            --no-sort \
+            --cycle \
+            --expect=enter,ctrl-o,ctrl-y \
+            --delimiter="$field_sep" \
+            --with-nth=2 \
+            --header="$title" \
+            --prompt="sizes › dirs › $label> " \
+            --query="$query" \
+            --layout=reverse \
+            --info=inline-right \
+            --preview="$item_preview_script dir {1} {6} {4} {3} {7}" \
+            --bind="ctrl-o:execute-silent($open_script {1} open-dir),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
+            --preview-window="$preview_window" \
+            --height='95%' \
+            --border \
+            <"$dir_list" || true)
+
+        rm -f "$dir_list"
+        interactive_quit_requested && return 0
+        [ "$fzf_out" = "" ] && return 0
+
         parsed=$(interactive_select_parts "$fzf_out")
         key=$(printf '%s\n' "$parsed" | sed -n '1p')
         selected=$(printf '%s\n' "$parsed" | sed -n '2p')
         path=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $1 }')
+        [ "$path" != "" ] && query=$(basename -- "$path")
         case "$key" in
             ctrl-o) [ "$path" != "" ] && "$open_script" "$path" open-dir ;;
             ctrl-y) [ "$path" != "" ] && "$open_script" "$path" copy ;;
-            *) [ "$selected" != "" ] && run_dir_action_menu "$fzf_cmd" "$selected" "$open_script" ;;
+            *) [ "$selected" != "" ] && run_dir_action_menu "$fzf_cmd" "$selected" "$open_script" "$records_file" "$item_preview_script" ;;
         esac
-    fi
+    done
 }
 
 run_interactive_extension_browser() {
@@ -2132,53 +2225,62 @@ run_interactive_extension_browser() {
     open_script=$6
     type_filter=${7:-}
 
-    ext_input=$summary_file
-    tmp_filtered=
-    if [ "$type_filter" != "" ]; then
-        tmp_filtered=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-ext.XXXXXX") || exit 1
-        awk -F"$field_sep" -v t="$type_filter" '$3 == t || $1 == "TOTAL" { print }' "$summary_file" >"$tmp_filtered"
-        ext_input=$tmp_filtered
-    fi
+    query=
 
-    preview_window=$(interactive_preview_window)
-    if [ "$type_filter" = "" ]; then
-        title='sizes extensions — / search · Enter/Ctrl-F files · Ctrl-D dirs · ? help · Esc back'
-    else
-        title=$(printf 'sizes extensions — type %s · Enter/Ctrl-F files · Ctrl-D dirs · ? help · Esc back' "$type_filter")
-    fi
+    while ! interactive_quit_requested; do
+        ext_input=$summary_file
+        tmp_filtered=
+        if [ "$type_filter" != "" ]; then
+            tmp_filtered=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-ext.XXXXXX") || exit 1
+            awk -F"$field_sep" -v t="$type_filter" '$3 == t || $1 == "TOTAL" { print }' "$summary_file" >"$tmp_filtered"
+            ext_input=$tmp_filtered
+        fi
 
-    fzf_out=$("$fzf_cmd" \
-        --ansi \
-        --no-sort \
-        --cycle \
-        --expect=enter,ctrl-f,ctrl-d \
-        --delimiter="$field_sep" \
-        --with-nth=2 \
-        --header="$title" \
-        --prompt='ext> ' \
-        --layout=reverse \
-        --info=inline-right \
-        --preview="$preview_script '$records_file' {1} summary" \
-        --bind="?:change-preview($preview_script '$records_file' HELP help),alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom" \
-        --preview-window="$preview_window" \
-        --height='95%' \
-        --border \
-        <"$ext_input" || true)
+        preview_window=$(interactive_preview_window)
+        if [ "$type_filter" = "" ]; then
+            title='sizes › extensions · Enter/Ctrl-F files · Ctrl-D dirs · ? help · Ctrl-B/Esc back · Ctrl-Q quit'
+            prompt='sizes › extensions> '
+        else
+            title=$(printf 'sizes › types › %s › extensions · Enter/Ctrl-F files · Ctrl-D dirs · ? help · Ctrl-B/Esc back · Ctrl-Q quit' "$type_filter")
+            prompt=$(printf 'sizes › types › %s › extensions> ' "$type_filter")
+        fi
 
-    [ "$tmp_filtered" != "" ] && rm -f "$tmp_filtered"
+        common_bindings=$(interactive_common_bindings)
+        fzf_out=$("$fzf_cmd" \
+            --ansi \
+            --no-sort \
+            --cycle \
+            --expect=enter,ctrl-f,ctrl-d \
+            --delimiter="$field_sep" \
+            --with-nth=2 \
+            --header="$title" \
+            --prompt="$prompt" \
+            --query="$query" \
+            --layout=reverse \
+            --info=inline-right \
+            --preview="$preview_script '$records_file' {1} summary" \
+            --bind="?:change-preview($preview_script '$records_file' HELP help),$common_bindings" \
+            --preview-window="$preview_window" \
+            --height='95%' \
+            --border \
+            <"$ext_input" || true)
 
-    if [ "$fzf_out" != "" ]; then
+        [ "$tmp_filtered" != "" ] && rm -f "$tmp_filtered"
+        interactive_quit_requested && return 0
+        [ "$fzf_out" = "" ] && return 0
+
         parsed=$(interactive_select_parts "$fzf_out")
         key=$(printf '%s\n' "$parsed" | sed -n '1p')
         selected=$(printf '%s\n' "$parsed" | sed -n '2p')
         if [ "$selected" != "" ]; then
             selected_ext=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $1 }')
+            query=$selected_ext
             case "$key" in
                 ctrl-d) run_interactive_dir_browser "$fzf_cmd" "$records_file" "$selected_ext" "$item_preview_script" "$open_script" ;;
                 *) run_interactive_file_browser "$fzf_cmd" "$records_file" "$selected_ext" "$item_preview_script" "$open_script" ;;
             esac
         fi
-    fi
+    done
 }
 
 run_interactive_type_browser() {
@@ -2189,43 +2291,56 @@ run_interactive_type_browser() {
     item_preview_script=$5
     open_script=$6
 
-    type_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-types.XXXXXX") || exit 1
-    make_interactive_type_list "$records_file" "$type_list"
+    query=
 
-    preview_window=$(interactive_preview_window)
-    fzf_out=$("$fzf_cmd" \
-        --ansi \
-        --no-sort \
-        --cycle \
-        --expect=enter,ctrl-f,ctrl-d \
-        --delimiter="$field_sep" \
-        --with-nth=2 \
-        --header='sizes types — Enter extensions · Ctrl-F files · Ctrl-D dirs · ? help · Esc back' \
-        --prompt='types> ' \
-        --layout=reverse \
-        --info=inline-right \
-        --preview="$preview_script '$records_file' {1} summary" \
-        --bind="?:change-preview($preview_script '$records_file' HELP help),alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom" \
-        --preview-window="$preview_window" \
-        --height='95%' \
-        --border \
-        <"$type_list" || true)
+    while ! interactive_quit_requested; do
+        type_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-types.XXXXXX") || exit 1
+        make_interactive_type_list "$records_file" "$type_list"
 
-    rm -f "$type_list"
+        if [ ! -s "$type_list" ]; then
+            rm -f "$type_list"
+            run_interactive_empty_state "$fzf_cmd" 'sizes › types' 'No matching types. Esc/Ctrl-B: back · Ctrl-Q: quit.'
+            return 0
+        fi
 
-    if [ "$fzf_out" != "" ]; then
+        preview_window=$(interactive_preview_window)
+        common_bindings=$(interactive_common_bindings)
+        fzf_out=$("$fzf_cmd" \
+            --ansi \
+            --no-sort \
+            --cycle \
+            --expect=enter,ctrl-f,ctrl-d \
+            --delimiter="$field_sep" \
+            --with-nth=2 \
+            --header='sizes › types · Enter extensions · Ctrl-F files · Ctrl-D dirs · ? help · Ctrl-B/Esc back · Ctrl-Q quit' \
+            --prompt='sizes › types> ' \
+            --query="$query" \
+            --layout=reverse \
+            --info=inline-right \
+            --preview="$preview_script '$records_file' {1} summary" \
+            --bind="?:change-preview($preview_script '$records_file' HELP help),$common_bindings" \
+            --preview-window="$preview_window" \
+            --height='95%' \
+            --border \
+            <"$type_list" || true)
+
+        rm -f "$type_list"
+        interactive_quit_requested && return 0
+        [ "$fzf_out" = "" ] && return 0
+
         parsed=$(interactive_select_parts "$fzf_out")
         key=$(printf '%s\n' "$parsed" | sed -n '1p')
         selected=$(printf '%s\n' "$parsed" | sed -n '2p')
         selected_type=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $3 }')
-        [ "$selected_type" = "" ] && return 0
+        [ "$selected_type" = "" ] && continue
+        query=$selected_type
         target="TYPE:$selected_type"
         case "$key" in
             ctrl-f) run_interactive_file_browser "$fzf_cmd" "$records_file" "$target" "$item_preview_script" "$open_script" ;;
             ctrl-d) run_interactive_dir_browser "$fzf_cmd" "$records_file" "$target" "$item_preview_script" "$open_script" ;;
             *) run_interactive_extension_browser "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" "$selected_type" ;;
         esac
-    fi
+    done
 }
 
 run_interactive_start_menu() {
@@ -2236,44 +2351,67 @@ run_interactive_start_menu() {
     item_preview_script=$5
     open_script=$6
 
-    menu_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-menu.XXXXXX") || exit 1
-    cat >"$menu_file" <<EOF
+    query=
+
+    while ! interactive_quit_requested; do
+        menu_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-menu.XXXXXX") || exit 1
+        cat >"$menu_file" <<EOF
 extensions${field_sep}Extensions       Browse extension summary, then drill into files or directories
 types${field_sep}Types            Browse by extension category such as video, image, archive, model
 top-files${field_sep}Top files        Browse the largest files across the scan
 top-dirs${field_sep}Top directories  Browse the largest directories across the scan
 by-dir${field_sep}By directory     Browse directory summaries
+refresh${field_sep}Refresh scan     Rescan with the same options
 help${field_sep}Help             Show interactive shortcuts and behavior
 EOF
 
-    preview_window=$(interactive_preview_window)
-    choice=$("$fzf_cmd" \
-        --ansi \
-        --no-sort \
-        --cycle \
-        --delimiter="$field_sep" \
-        --with-nth=2 \
-        --header='sizes interactive — choose a mode' \
-        --prompt='sizes> ' \
-        --layout=reverse \
-        --info=inline-right \
-        --preview="$preview_script '$records_file' HELP help" \
-        --preview-window="$preview_window" \
-        --height='95%' \
-        --border \
-        <"$menu_file" || true)
+        preview_window=$(interactive_preview_window)
+        fzf_out=$("$fzf_cmd" \
+            --ansi \
+            --no-sort \
+            --cycle \
+            --expect=enter,ctrl-r \
+            --delimiter="$field_sep" \
+            --with-nth=2 \
+            --header='sizes › main · choose a mode · Ctrl-R refresh · Ctrl-Q quit' \
+            --prompt='sizes › main> ' \
+            --query="$query" \
+            --layout=reverse \
+            --info=inline-right \
+            --preview="$preview_script '$records_file' HELP help" \
+            --preview-window="$preview_window" \
+            --height='95%' \
+            --border \
+            --bind="ctrl-q:execute-silent(touch $interactive_quit_file)+abort" \
+            <"$menu_file" || true)
 
-    rm -f "$menu_file"
-    action=$(printf '%s\n' "$choice" | awk -F"$field_sep" '{ print $1 }')
+        rm -f "$menu_file"
+        interactive_quit_requested && return 0
+        [ "$fzf_out" = "" ] && return 0
 
-    case "$action" in
-        types) run_interactive_type_browser "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" ;;
-        top-files) run_interactive_file_browser "$fzf_cmd" "$records_file" TOTAL "$item_preview_script" "$open_script" ;;
-        top-dirs|by-dir) run_interactive_dir_browser "$fzf_cmd" "$records_file" TOTAL "$item_preview_script" "$open_script" ;;
-        help) "$preview_script" "$records_file" HELP help ;;
-        extensions|'') run_interactive_extension_browser "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" "" ;;
-        *) : ;;
-    esac
+        parsed=$(interactive_select_parts "$fzf_out")
+        key=$(printf '%s\n' "$parsed" | sed -n '1p')
+        selected=$(printf '%s\n' "$parsed" | sed -n '2p')
+        action=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $1 }')
+        [ "$key" = "ctrl-r" ] && action=refresh
+        [ "$action" != "" ] && query=$action
+
+        case "$action" in
+            refresh)
+                : >"$summary_file"
+                : >"$records_file"
+                if ! run_interactive_scan "$summary_file" "$records_file"; then
+                    return 1
+                fi
+                ;;
+            types) run_interactive_type_browser "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" ;;
+            top-files) run_interactive_file_browser "$fzf_cmd" "$records_file" TOTAL "$item_preview_script" "$open_script" ;;
+            top-dirs|by-dir) run_interactive_dir_browser "$fzf_cmd" "$records_file" TOTAL "$item_preview_script" "$open_script" ;;
+            help) "$preview_script" "$records_file" HELP help ;;
+            extensions|'') run_interactive_extension_browser "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" "" ;;
+            *) : ;;
+        esac
+    done
 }
 
 run_interactive() {
@@ -2288,27 +2426,29 @@ run_interactive() {
     preview_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-preview.XXXXXX") || exit 1
     item_preview_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-item-preview.XXXXXX") || exit 1
     open_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-open.XXXXXX") || exit 1
+    interactive_quit_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-quit.XXXXXX") || exit 1
+    rm -f "$interactive_quit_file"
 
     write_interactive_preview_script "$preview_script"
     write_interactive_item_preview_script "$item_preview_script"
     write_interactive_open_script "$open_script"
 
     if ! run_interactive_scan "$summary_file" "$records_file"; then
-        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
+        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" "$interactive_quit_file"
         exit 1
     fi
 
     if [ ! -s "$summary_file" ]; then
         printf '%s\n' 'sizes: no files found'
         print_errors
-        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
+        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" "$interactive_quit_file"
         return 0
     fi
 
     run_interactive_start_menu "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
 
     print_errors
-    rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
+    rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" "$interactive_quit_file"
 }
 
 run_with_progress() {
