@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2
+
+- Fix interactive row layout so the largest entries appear at the top of the list.
+- Add preview-pane navigation bindings for interactive mode.
+- Document interactive preview scrolling keys.
+
 ## 0.5.1
 
 - Improve `--interactive` with aligned colored rows that match the main table style.

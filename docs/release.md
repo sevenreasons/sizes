@@ -1,6 +1,6 @@
 # Release notes
 
-## v0.5.1
+## v0.5.2
 
 - Improve `--interactive` with aligned colored rows that match the main table style.
 - Keep the extension list sorted and searchable in `fzf`.
@@ -13,7 +13,7 @@
 sh tests/run.sh
 shellcheck sizes.sh sizes tests/run.sh
 git add -A
-git commit -m "Improve interactive browser for v0.5.1"
-git tag -f v0.5.1
+git commit -m "Fix interactive ordering and preview navigation for v0.5.2"
+git tag -f v0.5.2
 git push origin master --tags
 ```

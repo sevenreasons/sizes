@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.5.1"
+VERSION="0.5.2"
 
 usage() {
     cat <<'USAGE'
@@ -1612,8 +1612,8 @@ run_interactive() {
     fi
 
     header=$(printf '%s\n%s\n%s' \
-        'sizes interactive — / search · ↑↓ select · Ctrl-F files · Ctrl-D dirs · Enter details · Esc quit' \
-        '────────────────────────────────────────────────────────────────────────────────────────────' \
+        'sizes interactive — / search · ↑↓ rows · Ctrl-F files · Ctrl-D dirs · Alt-J/K scroll preview · Alt-U/D page preview · Enter details · Esc quit' \
+        '────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────' \
         'EXT           TYPE              SIZE      FILES    SHARE')
 
     selected=$("$fzf_cmd" \
@@ -1624,9 +1624,12 @@ run_interactive() {
         --with-nth=2 \
         --header="$header" \
         --prompt='sizes> ' \
+        --layout=reverse-list \
+        --info=inline-right \
         --preview="$preview_script '$records_file' {1} files" \
         --bind="ctrl-f:change-preview($preview_script '$records_file' {1} files)" \
         --bind="ctrl-d:change-preview($preview_script '$records_file' {1} dirs)" \
+        --bind='alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom' \
         --preview-window='right:65%:wrap' \
         --height='95%' \
         --border \
