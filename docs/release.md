@@ -1,4 +1,4 @@
-# v0.7.4
+# v0.7.5
 
 Interactive UX polish.
 

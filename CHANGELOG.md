@@ -1,5 +1,11 @@
 # Changelog
 
+
+## 0.7.5
+
+- Fix stale interactive search input after file and directory actions.
+- Keep drilldown lists visible after opening, copying, or revealing selected paths.
+
 ## 0.7.4
 
 - Add `--interactive-no-preview` and `SIZES_INTERACTIVE_PREVIEW=0`.

@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.4"
+VERSION="0.7.5"
 
 usage() {
     cat <<'USAGE'
@@ -2498,7 +2498,9 @@ run_interactive_file_browser() {
         selected=$(printf '%s\n' "$parsed" | sed -n '2,$p' | sed '/^$/d')
         first_selected=$(printf '%s\n' "$selected" | sed -n '1p')
         first_path=$(printf '%s\n' "$first_selected" | awk -F"$field_sep" '{ print $1 }')
-        [ "$first_path" != "" ] && query=$(basename -- "$first_path")
+        # Do not seed the next fzf query with the selected filename.
+        # It made drilldown views reopen with a stale filename in the input
+        # after open/copy/action-menu flows, hiding the rest of the list.
 
         case "$key" in
             ctrl-o) [ "$first_path" != "" ] && "$open_script" "$first_path" open ;;
@@ -2572,7 +2574,8 @@ run_interactive_dir_browser() {
         key=$(printf '%s\n' "$parsed" | sed -n '1p')
         selected=$(printf '%s\n' "$parsed" | sed -n '2p')
         path=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $1 }')
-        [ "$path" != "" ] && query=$(basename -- "$path")
+        # Keep directory drilldown lists unfiltered when returning from actions.
+        # Full path reveal/open/copy must not leak the selected basename into fzf search.
         case "$key" in
             ctrl-o) [ "$path" != "" ] && "$open_script" "$path" open-dir ;;
             ctrl-y) [ "$path" != "" ] && "$open_script" "$path" copy ;;
