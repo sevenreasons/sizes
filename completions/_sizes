@@ -18,6 +18,7 @@ _arguments -s -S \
   '--top-dirs[show directories using the most space, optionally for extension]::extension:' \
   '--by-dir[summarize by immediate child directory]' \
   '(-i --interactive)'{-i,--interactive}'[open the fzf interactive browser]' \
+  '--interactive-no-preview[start interactive mode with preview hidden]' \
   '--sort[sort output]:field:(size files share ext type)' \
   '--format[output format]:format:(table tsv csv json)' \
   '--save[save output to file]:file:_files' \

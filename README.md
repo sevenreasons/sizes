@@ -62,6 +62,7 @@ sizes -r --top-files mp4 # largest MP4 files
 sizes -r --top-dirs mp4  # directories containing the most MP4 data
 sizes -r --by-dir        # summarize immediate child directories
 sizes -r -i              # interactive browser
+sizes -r -i --interactive-no-preview  # start with preview hidden
 ```
 
 ## Interactive mode
@@ -100,6 +101,8 @@ Tab      multi-select files
 Ctrl-O   open selected file
 Ctrl-P   open containing folder
 Ctrl-Y   copy selected path
+Ctrl-L   reveal full path
+Ctrl-/   toggle preview pane
 ```
 
 Directory screens:
@@ -108,9 +111,11 @@ Directory screens:
 Enter    action menu
 Ctrl-O   open directory
 Ctrl-Y   copy path
+Ctrl-L   reveal full path
+Ctrl-/   toggle preview pane
 ```
 
-Action menus show the selected file or directory in the header and preview pane before running an action.
+Action menus show the selected file or directory in the header and preview pane before running an action. They include safe actions such as open, open containing folder, open with another command, copy path, copy quoted path, print path, and print details.
 
 Preview scrolling:
 
@@ -134,7 +139,7 @@ JSON output includes scan metadata and rows:
 
 ```json
 {
-  "version": "0.7.3",
+  "version": "0.7.4",
   "root": ".",
   "mode": "recursive",
   "total_bytes": 123456,
@@ -162,6 +167,8 @@ JSON output includes scan metadata and rows:
     --top-dirs [EXT]     show largest directories, optionally for EXT
     --by-dir             summarize immediate child directories
 -i, --interactive        open interactive browser
+    --interactive-no-preview
+                         start interactive mode with preview hidden
     --sort FIELD         size, files, share, ext, type
     --format FORMAT      table, tsv, csv, json
     --save PATH          write output to PATH; infers .json/.csv/.tsv
@@ -183,6 +190,8 @@ SIZES_EXCLUDE=".git node_modules"
 SIZES_DEBUG_TIMING=1       print timing diagnostics
 SIZES_FZF=/path/to/fzf     override fzf command
 SIZES_IMAGE_PREVIEW=1      enable image previews in interactive mode
+SIZES_INTERACTIVE_PREVIEW=0 start interactive previews hidden
+SIZES_OPEN_WITH=cmd        default command for interactive Open with…
 SIZES_UPGRADE_URL=...      override upgrade source
 ```
 

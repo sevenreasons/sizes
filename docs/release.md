@@ -1,7 +1,11 @@
-# v0.7.3
+# v0.7.4
 
-Polishes interactive action menus.
+Interactive UX polish.
 
-- Action menus now display the selected file or directory in the header.
-- Action menus now include a preview card for the selected item.
-- File and directory actions now show clearer feedback after open/copy actions.
+- Add `--interactive-no-preview` / `SIZES_INTERACTIVE_PREVIEW=0`.
+- Add `Ctrl-L` full-path reveal in file and directory browsers.
+- Add copy quoted path actions.
+- Add Open with… actions through `SIZES_OPEN_WITH` or a prompt.
+- Add consistent Back/Quit rows to action menus.
+- Improve empty preview fallbacks and selected-item detail output.
+- Print a short interactive session closed message on exit.

@@ -70,11 +70,11 @@ OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.7\.3$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.7\.4$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.7\.3$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.7\.4$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -125,10 +125,10 @@ ok 'CLICOLOR=0'
 UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
 UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
 cp "$SIZES" "$UPGRADE_TARGET"
-sed 's/VERSION="0.7.3"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+sed 's/VERSION="0.7.4"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
 chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes: upgraded .+ from 0\.7\.3 to 9\.9\.9' '--upgrade reports old and new version'
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.7\.4 to 9\.9\.9' '--upgrade reports old and new version'
 "$UPGRADE_TARGET" --version >"$OUT"
 assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
 ok '--upgrade'
@@ -213,14 +213,14 @@ assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'follow keeps normal recur
 ok '--follow'
 
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" "$SIZES" --upgrade --check >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'current 0\.7\.3, available 9\.9\.9' 'upgrade check reports available version'
+assert_contains "$OUT" 'current 0\.7\.4, available 9\.9\.9' 'upgrade check reports available version'
 ok '--upgrade --check'
 
 UPGRADE_TARGET_VERSIONED="$TEST_ROOT/upgradable-versioned-sizes"
 cp "$SIZES" "$UPGRADE_TARGET_VERSIONED"
 chmod +x "$UPGRADE_TARGET_VERSIONED"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET_VERSIONED" "$UPGRADE_TARGET_VERSIONED" --upgrade --version v9.9.9 >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'from 0\.7\.3 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
+assert_contains "$OUT" 'from 0\.7\.4 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
 ok '--upgrade --version'
 
 
@@ -278,7 +278,7 @@ n=$((n + 1))
 printf '%s\n' "$n" >"$state"
 case "$n" in
     1|2|3) sed -n '1p' ;;
-    4) sed -n '5p' ;;
+    4) sed -n '8p' ;;
     *) exit 130 ;;
 esac
 FAKEFZF
@@ -306,6 +306,16 @@ assert_contains "$FZF_ARGS_LOG" 'sizes › file › action' 'interactive file br
 assert_contains "$FZF_ARGS_LOG" 'Selected:' 'interactive action menu displays the selected item'
 assert_contains "$FZF_ARGS_LOG" 'cat .*/sizes-file-action-item' 'interactive action menu previews selected item details'
 assert_contains "$FZF_ARGS_LOG" 'right:(45|55)%:wrap|down:45%:wrap' 'interactive preview is terminal-size aware'
+assert_contains "$FZF_ARGS_LOG" 'ctrl-/:toggle-preview' 'interactive mode can toggle previews'
+assert_contains "$FZF_ARGS_LOG" 'ctrl-l' 'interactive mode exposes full-path reveal'
+grep -q 'Copy quoted path' "$SIZES" || fail 'interactive action menu can copy quoted paths'
+grep -q 'Open with' "$SIZES" || fail 'interactive action menu exposes Open with'
 ok '--interactive'
+
+FZF_ARGS_LOG="$TEST_ROOT/fzf-args-no-preview.log"
+FZF_STATE_FILE="$TEST_ROOT/fzf-state-no-preview"
+env NO_COLOR=1 FZF_ARGS_LOG="$FZF_ARGS_LOG" FZF_STATE_FILE="$FZF_STATE_FILE" PATH="$FAKE_BIN:$PATH" "$SIZES" -r --interactive --interactive-no-preview --no-progress "$SAMPLE" >"$OUT" 2>"$ERR" || true
+assert_contains "$FZF_ARGS_LOG" 'hidden' 'interactive-no-preview starts preview hidden'
+ok '--interactive-no-preview'
 
 printf '\n%d tests passed\n' "$pass"

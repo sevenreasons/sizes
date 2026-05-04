@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.3"
+VERSION="0.7.4"
 
 usage() {
     cat <<'USAGE'
@@ -31,6 +31,8 @@ Options:
       --top-dirs [EXT]     Show directories using the most space, optionally for EXT.
       --by-dir             Summarize usage by immediate child directory.
   -i, --interactive        Open the fzf interactive browser.
+      --interactive-no-preview
+                           Start interactive mode with preview hidden.
       --sort FIELD         Sort by size, files, share, ext, or type. Default: size.
       --format FORMAT      Output table, tsv, csv, or json. Default: table.
       --save PATH          Save output to a file. Infers format from .json/.csv/.tsv.
@@ -53,6 +55,9 @@ Environment:
   SIZES_DEBUG_TIMING=1     Print coarse timing diagnostics to stderr.
   SIZES_FZF=/path/to/fzf   Override fzf command for --interactive.
   SIZES_IMAGE_PREVIEW=1    Enable optional image previews in file browser.
+  SIZES_INTERACTIVE_PREVIEW=0
+                           Start interactive previews hidden.
+  SIZES_OPEN_WITH=cmd      Default command for interactive Open with… action.
 
 Examples:
   sizes
@@ -70,6 +75,7 @@ Examples:
   sizes -r --top-dirs mp4
   sizes -r --by-dir
   sizes -r --interactive
+  sizes -r --interactive --interactive-no-preview
   sizes -r --group-by type
   sizes -r --format json
   sizes -r --save report.json
@@ -258,6 +264,7 @@ top_dirs=0
 top_dirs_ext=""
 by_dir=0
 interactive=0
+interactive_preview=1
 save_path=""
 include_data=""
 include_count=0
@@ -411,6 +418,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         -i|--interactive)
             interactive=1
+            shift
+            ;;
+        --interactive-no-preview)
+            interactive_preview=0
             shift
             ;;
         --min-size)
@@ -599,6 +610,10 @@ if [ "$interactive" -eq 1 ]; then
     [ "$save_path" = "" ] || fail "--interactive cannot be used with --save"
     [ "$format" = "table" ] || fail "--interactive cannot be used with --format"
     [ "$group_by" = "ext" ] || fail "--interactive currently supports --group-by ext only"
+fi
+
+if [ "${SIZES_INTERACTIVE_PREVIEW:-1}" = "0" ]; then
+    interactive_preview=0
 fi
 
 if [ "$format" != "table" ]; then
@@ -1541,7 +1556,13 @@ HELP
 fi
 
 if [ "$target" = "" ]; then
-    printf '%s\n' 'Select a row to preview details.'
+    cat <<'EMPTY'
+No selection
+────────────
+
+Use ↑/↓ to choose an item.
+Press ? for contextual help.
+EMPTY
     exit 0
 fi
 
@@ -1699,7 +1720,7 @@ interactive_select_parts() {
     second=$(printf '%s\n' "$fzf_output" | sed -n '2p')
 
     case "$first" in
-        enter|ctrl-f|ctrl-d|ctrl-o|ctrl-p|ctrl-y|ctrl-a|ctrl-b|ctrl-t|ctrl-r)
+        enter|ctrl-f|ctrl-d|ctrl-o|ctrl-p|ctrl-y|ctrl-l|ctrl-a|ctrl-b|ctrl-t|ctrl-r)
             printf '%s\n%s\n' "$first" "$second"
             ;;
         '')
@@ -1725,7 +1746,16 @@ ext=${5:-}
 files=${6:-}
 
 human_path=$path
-[ "$human_path" = "" ] && human_path="-"
+if [ "$human_path" = "" ] || [ "$human_path" = "{}" ]; then
+    cat <<'EMPTY'
+No selection
+────────────
+
+Use ↑/↓ to choose an item.
+Press ? for contextual help.
+EMPTY
+    exit 0
+fi
 
 is_image_ext() {
     case "$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')" in
@@ -1836,30 +1866,37 @@ open_path() {
     fi
 }
 
-copy_path() {
+quote_path() {
+    printf "'%s'" "$(printf '%s' "$path" | sed "s/'/'\\\\''/g")"
+}
+
+copy_text() {
+    text=$1
     if command -v wl-copy >/dev/null 2>&1; then
-        printf '%s' "$path" | wl-copy
+        printf '%s' "$text" | wl-copy
     elif command -v xclip >/dev/null 2>&1; then
-        printf '%s' "$path" | xclip -selection clipboard
+        printf '%s' "$text" | xclip -selection clipboard
     elif command -v xsel >/dev/null 2>&1; then
-        printf '%s' "$path" | xsel --clipboard --input
+        printf '%s' "$text" | xsel --clipboard --input
     elif command -v pbcopy >/dev/null 2>&1; then
-        printf '%s' "$path" | pbcopy
+        printf '%s' "$text" | pbcopy
     elif command -v clip.exe >/dev/null 2>&1; then
-        printf '%s' "$path" | clip.exe
+        printf '%s' "$text" | clip.exe
     else
-        printf '%s\n' "$path"
+        printf '%s\n' "$text"
         exit 2
     fi
 }
 
 case "$action" in
     parent)
-        parent=$(dirname -- "$path")
-        open_path "$parent"
+        open_path "$(dirname -- "$path")"
         ;;
     copy)
-        copy_path
+        copy_text "$path"
+        ;;
+    copy-quoted)
+        copy_text "$(quote_path)"
         ;;
     open-dir|dir)
         open_path "$path"
@@ -1992,12 +2029,34 @@ make_interactive_type_list() {
     ' >"$out_file"
 }
 
+interactive_shell_quote() {
+    printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+interactive_open_with() {
+    path=$1
+    opener=${SIZES_OPEN_WITH:-}
+    if [ "$opener" = "" ] && [ -r /dev/tty ]; then
+        printf '%s' 'sizes: open with command: ' >/dev/tty
+        IFS= read -r opener </dev/tty || opener=
+    fi
+    [ "$opener" != "" ] || return 2
+    if command -v "$opener" >/dev/null 2>&1; then
+        ("$opener" "$path" >/dev/null 2>&1 &) || true
+        return 0
+    fi
+    printf '%s\n' "sizes: opener not found: $opener" >&2
+    return 1
+}
+
 print_selected_file() {
     selected_file=$1
     printf '%s\n' "$selected_file" | awk -F"$field_sep" '
         {
             print "sizes — selected file"
             print ""
+            print "File"
+            print "────"
             printf "Path: %s\n", $1
             printf "Size: %s\n", $6
             printf "Ext:  %s\n", $3
@@ -2011,6 +2070,8 @@ print_selected_dir() {
         {
             print "sizes — selected directory"
             print ""
+            print "Directory"
+            print "─────────"
             printf "Path:  %s\n", $1
             printf "Size:  %s\n", $6
             printf "Files: %d\n", $7
@@ -2020,6 +2081,11 @@ print_selected_dir() {
 }
 
 interactive_preview_window() {
+    if [ "$interactive_preview" -eq 0 ]; then
+        printf '%s\n' 'hidden'
+        return 0
+    fi
+
     cols=$(tput cols 2>/dev/null || printf '120')
     case "$cols" in ''|*[!0-9]*) cols=120 ;; esac
     if [ "$cols" -lt 100 ]; then
@@ -2036,7 +2102,7 @@ interactive_quit_requested() {
 }
 
 interactive_common_bindings() {
-    printf '%s' "ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort,alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom"
+    printf '%s' "ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort,alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom,ctrl-/:toggle-preview"
 }
 
 interactive_screen_header() {
@@ -2112,15 +2178,19 @@ run_file_action_menu() {
     cat >"$action_file" <<EOF
 open${field_sep}Open file
 folder${field_sep}Open containing folder
+open-with${field_sep}Open with…
 copy${field_sep}Copy path
-path${field_sep}Print path
+copy-quoted${field_sep}Copy quoted path
+path${field_sep}Show full path
+quoted-path${field_sep}Print quoted path
 details${field_sep}Print details
 back${field_sep}Back
+quit${field_sep}Quit
 EOF
 
     {
-        printf '%s\n' 'File'
-        printf '%s\n\n' '────'
+        printf '%s\n' 'Selected file'
+        printf '%s\n\n' '─────────────'
         printf '%s\n' 'Path'
         printf '  %s\n\n' "$path"
         printf '%-10s %s\n' 'Size' "${size_h:-'-'}"
@@ -2132,7 +2202,9 @@ EOF
         printf '%-10s %s\n' 'Ctrl-O' 'open file'
         printf '%-10s %s\n' 'Ctrl-P' 'open containing folder'
         printf '%-10s %s\n' 'Ctrl-Y' 'copy path'
-        printf '%-10s %s\n' 'Esc' 'back'
+        printf '%-10s %s\n' 'Ctrl-L' 'reveal full path'
+        printf '%-10s %s\n' 'Open with' 'uses SIZES_OPEN_WITH or prompts'
+        printf '%-10s %s\n' 'Back/Quit' 'return or exit interactive mode'
     } >"$item_file"
 
     preview_window=$(interactive_preview_window)
@@ -2140,7 +2212,7 @@ EOF
     choice=$("$fzf_cmd" \
         --ansi \
         --no-sort \
-        --expect=enter,ctrl-o,ctrl-p,ctrl-y \
+        --expect=enter,ctrl-o,ctrl-p,ctrl-y,ctrl-l \
         --delimiter="$field_sep" \
         --with-nth=2 \
         --header="$header" \
@@ -2151,7 +2223,7 @@ EOF
         --border \
         --preview="cat \"$item_file\"" \
         --preview-window="$preview_window" \
-        --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort" \
+        --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort,ctrl-/:toggle-preview" \
         <"$action_file" || true)
     rm -f "$action_file" "$item_file"
 
@@ -2166,6 +2238,7 @@ EOF
         ctrl-o) action=open ;;
         ctrl-p) action=folder ;;
         ctrl-y) action=copy ;;
+        ctrl-l) action=full-path ;;
     esac
 
     case "$action" in
@@ -2188,6 +2261,15 @@ $parent"
 $path"
             fi
             ;;
+        open-with)
+            if interactive_open_with "$path"; then
+                run_interactive_notice "$fzf_cmd" 'sizes › opened with command' "Opened with ${SIZES_OPEN_WITH:-selected command}:
+$path"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › open with failed' "Could not open with another command:
+$path"
+            fi
+            ;;
         copy)
             if "$open_script" "$path" copy; then
                 run_interactive_notice "$fzf_cmd" 'sizes › copied path' "Copied path:
@@ -2197,8 +2279,19 @@ $path"
 $path"
             fi
             ;;
-        path) printf '%s\n' "$path" ;;
+        copy-quoted)
+            if "$open_script" "$path" copy-quoted; then
+                run_interactive_notice "$fzf_cmd" 'sizes › copied quoted path' "Copied quoted path:
+$(interactive_shell_quote "$path")"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › copy unavailable' "No clipboard tool found. Quoted path:
+$(interactive_shell_quote "$path")"
+            fi
+            ;;
+        path|full-path) run_interactive_notice "$fzf_cmd" 'sizes › full path' "$path" ;;
+        quoted-path) printf '%s\n' "$(interactive_shell_quote "$path")" ;;
         details) print_selected_file "$selected_file" ;;
+        quit) : >"$interactive_quit_file" ;;
         back|'') : ;;
         *) : ;;
     esac
@@ -2233,15 +2326,19 @@ run_dir_action_menu() {
     cat >"$action_file" <<EOF
 open${field_sep}Open directory
 browse${field_sep}Browse files in directory
+open-with${field_sep}Open with…
 copy${field_sep}Copy path
-path${field_sep}Print path
+copy-quoted${field_sep}Copy quoted path
+path${field_sep}Show full path
+quoted-path${field_sep}Print quoted path
 details${field_sep}Print details
 back${field_sep}Back
+quit${field_sep}Quit
 EOF
 
     {
-        printf '%s\n' 'Directory'
-        printf '%s\n\n' '─────────'
+        printf '%s\n' 'Selected directory'
+        printf '%s\n\n' '──────────────────'
         printf '%s\n' 'Path'
         printf '  %s\n\n' "$path"
         printf '%-10s %s\n' 'Size' "${size_h:-'-'}"
@@ -2253,7 +2350,9 @@ EOF
         printf '%-10s %s\n' 'Enter' 'run selected action'
         printf '%-10s %s\n' 'Ctrl-O' 'open directory'
         printf '%-10s %s\n' 'Ctrl-Y' 'copy path'
-        printf '%-10s %s\n' 'Esc' 'back'
+        printf '%-10s %s\n' 'Ctrl-L' 'reveal full path'
+        printf '%-10s %s\n' 'Open with' 'uses SIZES_OPEN_WITH or prompts'
+        printf '%-10s %s\n' 'Back/Quit' 'return or exit interactive mode'
     } >"$item_file"
 
     preview_window=$(interactive_preview_window)
@@ -2261,7 +2360,7 @@ EOF
     choice=$("$fzf_cmd" \
         --ansi \
         --no-sort \
-        --expect=enter,ctrl-o,ctrl-y \
+        --expect=enter,ctrl-o,ctrl-y,ctrl-l \
         --delimiter="$field_sep" \
         --with-nth=2 \
         --header="$header" \
@@ -2272,7 +2371,7 @@ EOF
         --border \
         --preview="cat \"$item_file\"" \
         --preview-window="$preview_window" \
-        --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort" \
+        --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort,ctrl-/:toggle-preview" \
         <"$action_file" || true)
     rm -f "$action_file" "$item_file"
 
@@ -2286,6 +2385,7 @@ EOF
     case "$key" in
         ctrl-o) action=open ;;
         ctrl-y) action=copy ;;
+        ctrl-l) action=full-path ;;
     esac
 
     case "$action" in
@@ -2304,6 +2404,15 @@ $path"
             run_interactive_file_browser "$fzf_cmd" "$tmp_records" TOTAL "$item_preview_script" "$open_script"
             rm -f "$tmp_records"
             ;;
+        open-with)
+            if interactive_open_with "$path"; then
+                run_interactive_notice "$fzf_cmd" 'sizes › opened with command' "Opened with ${SIZES_OPEN_WITH:-selected command}:
+$path"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › open with failed' "Could not open with another command:
+$path"
+            fi
+            ;;
         copy)
             if "$open_script" "$path" copy; then
                 run_interactive_notice "$fzf_cmd" 'sizes › copied path' "Copied path:
@@ -2313,8 +2422,19 @@ $path"
 $path"
             fi
             ;;
-        path) printf '%s\n' "$path" ;;
+        copy-quoted)
+            if "$open_script" "$path" copy-quoted; then
+                run_interactive_notice "$fzf_cmd" 'sizes › copied quoted path' "Copied quoted path:
+$(interactive_shell_quote "$path")"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › copy unavailable' "No clipboard tool found. Quoted path:
+$(interactive_shell_quote "$path")"
+            fi
+            ;;
+        path|full-path) run_interactive_notice "$fzf_cmd" 'sizes › full path' "$path" ;;
+        quoted-path) printf '%s\n' "$(interactive_shell_quote "$path")" ;;
         details) print_selected_dir "$selected_dir" ;;
+        quit) : >"$interactive_quit_file" ;;
         back|'') : ;;
         *) : ;;
     esac
@@ -2347,14 +2467,14 @@ run_interactive_file_browser() {
         fi
 
         preview_window=$(interactive_preview_window)
-        title=$(interactive_screen_header "sizes › files › $label" 'Enter actions · Tab select · Ctrl-O open · Ctrl-P folder · Ctrl-Y copy · ? help · Esc back · Ctrl-Q quit' 'SIZE         EXT       PATH')
+        title=$(interactive_screen_header "sizes › files › $label" 'Context: selected row preview shows full details · Enter actions · Ctrl-L full path · Ctrl-/ preview · Esc back · Ctrl-Q quit' 'SIZE         EXT       PATH')
         common_bindings=$(interactive_common_bindings)
         fzf_out=$("$fzf_cmd" \
             --ansi \
             --no-sort \
             --multi \
             --cycle \
-            --expect=enter,ctrl-o,ctrl-p,ctrl-y \
+            --expect=enter,ctrl-o,ctrl-p,ctrl-y,ctrl-l \
             --delimiter="$field_sep" \
             --with-nth=2 \
             --header="$title" \
@@ -2384,6 +2504,7 @@ run_interactive_file_browser() {
             ctrl-o) [ "$first_path" != "" ] && "$open_script" "$first_path" open ;;
             ctrl-p) [ "$first_path" != "" ] && "$open_script" "$first_path" parent ;;
             ctrl-y) [ "$first_path" != "" ] && "$open_script" "$first_path" copy ;;
+            ctrl-l) [ "$first_path" != "" ] && run_interactive_notice "$fzf_cmd" 'sizes › full path' "$first_path" ;;
             *)
                 if [ "$(printf '%s\n' "$selected" | sed '/^$/d' | wc -l | tr -d ' ')" -gt 1 ]; then
                     printf '%s\n' "$selected" | awk -F"$field_sep" '{print $1}'
@@ -2422,13 +2543,13 @@ run_interactive_dir_browser() {
         fi
 
         preview_window=$(interactive_preview_window)
-        title=$(interactive_screen_header "sizes › dirs › $label" 'Enter actions · Ctrl-O open · Ctrl-Y copy · ? help · Esc back · Ctrl-Q quit' 'SIZE         FILES     PATH')
+        title=$(interactive_screen_header "sizes › dirs › $label" 'Context: selected row preview shows full details · Enter actions · Ctrl-L full path · Ctrl-/ preview · Esc back · Ctrl-Q quit' 'SIZE         FILES     PATH')
         common_bindings=$(interactive_common_bindings)
         fzf_out=$("$fzf_cmd" \
             --ansi \
             --no-sort \
             --cycle \
-            --expect=enter,ctrl-o,ctrl-y \
+            --expect=enter,ctrl-o,ctrl-y,ctrl-l \
             --delimiter="$field_sep" \
             --with-nth=2 \
             --header="$title" \
@@ -2455,6 +2576,7 @@ run_interactive_dir_browser() {
         case "$key" in
             ctrl-o) [ "$path" != "" ] && "$open_script" "$path" open-dir ;;
             ctrl-y) [ "$path" != "" ] && "$open_script" "$path" copy ;;
+            ctrl-l) [ "$path" != "" ] && run_interactive_notice "$fzf_cmd" 'sizes › full path' "$path" ;;
             *) [ "$selected" != "" ] && run_dir_action_menu "$fzf_cmd" "$selected" "$open_script" "$records_file" "$item_preview_script" ;;
         esac
     done
@@ -2672,7 +2794,7 @@ print_interactive_scan_summary() {
             return sprintf("%.2f %s", n, units[u])
         }
         { bytes += $1; files += 1 }
-        END { printf "sizes: scanned %d files · %s · opening interactive browser\n", files, human(bytes) }
+        END { printf "sizes: scanned %d files · %s · interactive ready\n", files, human(bytes) }
     ' "$records_file" >&2
 }
 
@@ -2709,6 +2831,7 @@ run_interactive() {
 
     print_interactive_scan_summary "$records_file"
     run_interactive_start_menu "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
+    printf '%s\n' 'sizes: interactive session closed' >&2
 
     print_errors
     rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" "$interactive_quit_file"

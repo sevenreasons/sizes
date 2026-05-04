@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.4
+
+- Add `--interactive-no-preview` and `SIZES_INTERACTIVE_PREVIEW=0`.
+- Add full-path reveal with `Ctrl-L` in file and directory browsers.
+- Add copy quoted path actions for shell-friendly paths.
+- Add Open with… actions via `SIZES_OPEN_WITH` or an interactive command prompt.
+- Add consistent Back and Quit rows to file and directory action menus.
+- Improve empty preview fallbacks and selected-item detail output.
+- Add interactive cleanup feedback after closing the browser.
+- Expand interactive fake-fzf coverage.
+
 ## 0.7.3
 
 - Polish interactive file and directory action menus.

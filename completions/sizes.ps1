@@ -20,7 +20,7 @@ Register-ArgumentCompleter -Native -CommandName sizes -ScriptBlock {
         '--group-by' { 'ext','type' | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }; return }
     }
 
-    '-r','--recursive','--depth','--follow','-x','--one-file-system','--max-files','-n','--limit','--min-size','--min-share','-e','--exact','-E','--errors','--include','--exclude','--type','--top-files','--top-dirs','--by-dir','-i','--interactive','--sort','--format','--save','--group-by','--plain','--no-progress','--no-color','--upgrade','--check','--version','-h','--help' |
+    '-r','--recursive','--depth','--follow','-x','--one-file-system','--max-files','-n','--limit','--min-size','--min-share','-e','--exact','-E','--errors','--include','--exclude','--type','--top-files','--top-dirs','--by-dir','-i','--interactive','--interactive-no-preview','--sort','--format','--save','--group-by','--plain','--no-progress','--no-color','--upgrade','--check','--version','-h','--help' |
         Where-Object { $_ -like "$wordToComplete*" } |
         ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterName', $_) }
 }
