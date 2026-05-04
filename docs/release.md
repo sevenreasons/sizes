@@ -1,4 +1,6 @@
-# v0.7.7
+# v0.7.10
 
-- Fix interactive file/directory browsers losing the selected row after action menus.
-- Restore cursor position without leaking the selected path into the search query.
+- Add interactive trash actions for files and directories.
+- Add permanent delete actions behind `--allow-delete` / `SIZES_ALLOW_DELETE=1`.
+- Require typed confirmation before permanent deletion.
+- Add `SIZES_TRASH_CMD` for overriding the trash command.

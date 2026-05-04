@@ -20,6 +20,7 @@ export extern sizes [
     --by-dir                 # Summarize by immediate child directory
     --interactive(-i)        # Open the fzf interactive browser
     --interactive-no-preview  # Start interactive mode with preview hidden
+    --allow-delete             # Enable permanent delete actions in interactive mode
     --sort: string           # Sort by size, files, share, ext, or type
     --format: string         # Output table, tsv, csv, or json
     --save: path             # Save output to file

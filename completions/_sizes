@@ -19,6 +19,7 @@ _arguments -s -S \
   '--by-dir[summarize by immediate child directory]' \
   '(-i --interactive)'{-i,--interactive}'[open the fzf interactive browser]' \
   '--interactive-no-preview[start interactive mode with preview hidden]' \
+  '--allow-delete[enable permanent delete actions in interactive mode]' \
   '--sort[sort output]:field:(size files share ext type)' \
   '--format[output format]:format:(table tsv csv json)' \
   '--save[save output to file]:file:_files' \

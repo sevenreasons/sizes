@@ -48,7 +48,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
 - GNU `find` (`find -printf` is required). Linux usually already has it.
 - macOS: `brew install findutils`.
 - Interactive mode: `fzf`.
-- Optional image previews: `SIZES_IMAGE_PREVIEW=1` plus `chafa`, `viu`, `kitty`, `wezterm`, or `imgcat`.
+- Optional image previews: `SIZES_IMAGE_PREVIEW=1` plus `chafa`. Previews are text/ANSI-only so they stay inside the fzf preview pane.
 
 ## Quick use
 
@@ -63,6 +63,7 @@ sizes -r --top-dirs mp4  # directories containing the most MP4 data
 sizes -r --by-dir        # summarize immediate child directories
 sizes -r -i              # interactive browser
 sizes -r -i --interactive-no-preview  # start with preview hidden
+sizes -r -i --allow-delete       # enable permanent delete actions
 ```
 
 ## Interactive mode
@@ -115,7 +116,20 @@ Ctrl-L   reveal full path
 Ctrl-/   toggle preview pane
 ```
 
-Action menus show the selected file or directory in the header and preview pane before running an action. They include safe actions such as open, open containing folder, open with another command, copy path, copy quoted path, print path, and print details.
+Action menus show the selected file or directory in the header and preview pane before running an action. They include safe actions such as open, open containing folder, open with another command, copy path, copy quoted path, print path, print details, and trash. Permanent delete is available only when explicitly enabled.
+
+Preview scrolling:
+
+Cleanup actions:
+
+```text
+Trash               move selected file/dir to the system trash
+Delete permanently  requires --allow-delete or SIZES_ALLOW_DELETE=1
+DELETE              typed confirmation for permanent file deletion
+DELETE DIR          typed confirmation for permanent directory deletion
+```
+
+Trash uses `gio trash`, `trash-put`, KDE `kioclient`, or `SIZES_TRASH_CMD`. It never silently falls back to `rm`. Permanent delete cannot be undone.
 
 Preview scrolling:
 
@@ -139,7 +153,7 @@ JSON output includes scan metadata and rows:
 
 ```json
 {
-  "version": "0.7.7",
+  "version": "0.7.10",
   "root": ".",
   "mode": "recursive",
   "total_bytes": 123456,
@@ -169,6 +183,7 @@ JSON output includes scan metadata and rows:
 -i, --interactive        open interactive browser
     --interactive-no-preview
                          start interactive mode with preview hidden
+    --allow-delete       enable permanent delete actions in interactive mode
     --sort FIELD         size, files, share, ext, type
     --format FORMAT      table, tsv, csv, json
     --save PATH          write output to PATH; infers .json/.csv/.tsv
@@ -189,9 +204,12 @@ CLICOLOR=0                 disable colors
 SIZES_EXCLUDE=".git node_modules"
 SIZES_DEBUG_TIMING=1       print timing diagnostics
 SIZES_FZF=/path/to/fzf     override fzf command
-SIZES_IMAGE_PREVIEW=1      enable image previews in interactive mode
+SIZES_IMAGE_PREVIEW=1      enable safe chafa text previews in interactive mode
+SIZES_IMAGE_PREVIEW_SIZE=56x16 set chafa preview size
 SIZES_INTERACTIVE_PREVIEW=0 start interactive previews hidden
 SIZES_OPEN_WITH=cmd        default command for interactive Open with…
+SIZES_TRASH_CMD=cmd        override command for interactive Trash actions
+SIZES_ALLOW_DELETE=1       enable permanent delete actions in interactive mode
 SIZES_UPGRADE_URL=...      override upgrade source
 ```
 

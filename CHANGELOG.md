@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.10
+
+- Add interactive trash actions for files and directories.
+- Add permanent delete actions behind `--allow-delete` / `SIZES_ALLOW_DELETE=1`.
+- Require typed confirmation before permanent deletion.
+- Add `SIZES_TRASH_CMD` for overriding the trash command.
+- Document cleanup safety behavior.
+
+## 0.7.9
+
+- Fix the ShellCheck warning in the image-preview safety test.
+- Keep optional image previews limited to safe chafa text/symbol output.
+- Keep `SIZES_IMAGE_PREVIEW_SIZE` for tuning the chafa preview size.
+
 ## 0.7.7
 
 - Preserve file and directory browser cursor position after returning from action menus using fzf's load event.

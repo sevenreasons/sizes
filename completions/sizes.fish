@@ -18,6 +18,7 @@ complete -c sizes -l top-dirs -d 'Show directories using the most space, optiona
 complete -c sizes -l by-dir -d 'Summarize by immediate child directory'
 complete -c sizes -s i -l interactive -d 'Open the fzf interactive browser'
 complete -c sizes -l interactive-no-preview -d 'Start interactive mode with preview hidden'
+complete -c sizes -l allow-delete -d 'Enable permanent delete actions in interactive mode'
 complete -c sizes -l sort -d 'Sort output' -x -a 'size files share ext type'
 complete -c sizes -l format -d 'Output format' -x -a 'table tsv csv json'
 complete -c sizes -l save -d 'Save output to file' -r

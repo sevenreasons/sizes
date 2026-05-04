@@ -70,11 +70,11 @@ OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.7\.7$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.7\.10$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.7\.7$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.7\.10$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -125,10 +125,10 @@ ok 'CLICOLOR=0'
 UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
 UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
 cp "$SIZES" "$UPGRADE_TARGET"
-sed 's/VERSION="0.7.7"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+sed 's/VERSION="0.7.10"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
 chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes: upgraded .+ from 0\.7\.7 to 9\.9\.9' '--upgrade reports old and new version'
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.7\.10 to 9\.9\.9' '--upgrade reports old and new version'
 "$UPGRADE_TARGET" --version >"$OUT"
 assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
 ok '--upgrade'
@@ -213,14 +213,14 @@ assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'follow keeps normal recur
 ok '--follow'
 
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" "$SIZES" --upgrade --check >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'current 0\.7\.7, available 9\.9\.9' 'upgrade check reports available version'
+assert_contains "$OUT" 'current 0\.7\.10, available 9\.9\.9' 'upgrade check reports available version'
 ok '--upgrade --check'
 
 UPGRADE_TARGET_VERSIONED="$TEST_ROOT/upgradable-versioned-sizes"
 cp "$SIZES" "$UPGRADE_TARGET_VERSIONED"
 chmod +x "$UPGRADE_TARGET_VERSIONED"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET_VERSIONED" "$UPGRADE_TARGET_VERSIONED" --upgrade --version v9.9.9 >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'from 0\.7\.7 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
+assert_contains "$OUT" 'from 0\.7\.10 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
 ok '--upgrade --version'
 
 
@@ -310,6 +310,14 @@ assert_contains "$FZF_ARGS_LOG" 'ctrl-/:toggle-preview' 'interactive mode can to
 assert_contains "$FZF_ARGS_LOG" 'ctrl-l' 'interactive mode exposes full-path reveal'
 grep -q 'Copy quoted path' "$SIZES" || fail 'interactive action menu can copy quoted paths'
 grep -q 'Open with' "$SIZES" || fail 'interactive action menu exposes Open with'
+grep -q 'Trash file' "$SIZES" || fail 'interactive action menu exposes trash action'
+grep -q 'Delete permanently' "$SIZES" || fail 'interactive action menu exposes permanent delete action'
+grep -q 'SIZES_TRASH_CMD' "$SIZES" || fail 'interactive trash command override is documented in the script'
+grep -q -- '--allow-delete' "$SIZES" || fail 'interactive permanent delete requires an explicit flag'
+grep -q 'chafa --format=symbols' "$SIZES" || fail 'image preview uses chafa symbol mode'
+if grep -Eq "kitty [+]kitten icat|wezterm imgcat|imgcat \"\$human_path\"|viu -w" "$SIZES"; then
+    fail 'image preview must not use terminal graphics protocols inside fzf previews'
+fi
 ok '--interactive'
 
 FZF_ARGS_LOG="$TEST_ROOT/fzf-args-no-preview.log"

@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.7"
+VERSION="0.7.10"
 
 usage() {
     cat <<'USAGE'
@@ -33,6 +33,7 @@ Options:
   -i, --interactive        Open the fzf interactive browser.
       --interactive-no-preview
                            Start interactive mode with preview hidden.
+      --allow-delete       Enable permanent delete actions in interactive mode.
       --sort FIELD         Sort by size, files, share, ext, or type. Default: size.
       --format FORMAT      Output table, tsv, csv, or json. Default: table.
       --save PATH          Save output to a file. Infers format from .json/.csv/.tsv.
@@ -58,6 +59,8 @@ Environment:
   SIZES_INTERACTIVE_PREVIEW=0
                            Start interactive previews hidden.
   SIZES_OPEN_WITH=cmd      Default command for interactive Open with… action.
+  SIZES_TRASH_CMD=cmd      Override trash command for interactive trash actions.
+  SIZES_ALLOW_DELETE=1     Enable permanent delete actions in interactive mode.
 
 Examples:
   sizes
@@ -76,6 +79,7 @@ Examples:
   sizes -r --by-dir
   sizes -r --interactive
   sizes -r --interactive --interactive-no-preview
+  sizes -r --interactive --allow-delete
   sizes -r --group-by type
   sizes -r --format json
   sizes -r --save report.json
@@ -265,6 +269,7 @@ top_dirs_ext=""
 by_dir=0
 interactive=0
 interactive_preview=1
+allow_delete=0
 save_path=""
 include_data=""
 include_count=0
@@ -422,6 +427,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --interactive-no-preview)
             interactive_preview=0
+            shift
+            ;;
+        --allow-delete)
+            allow_delete=1
             shift
             ;;
         --min-size)
@@ -1768,23 +1777,22 @@ preview_image() {
     [ "${SIZES_IMAGE_PREVIEW:-}" != "" ] || return 0
     [ -f "$human_path" ] || return 0
     is_image_ext "$ext" || return 0
+
     printf '\n%s\n' 'Image preview'
     printf '%s\n' '─────────────'
+
+    # fzf preview panes are not a safe place for terminal graphics protocols
+    # such as kitty/wezterm/imgcat/viu: they can draw outside the preview pane
+    # and leave stale images behind after scrolling or leaving the browser.
+    # Use chafa in symbol mode only so previews stay text/ANSI-bound.
     if command -v chafa >/dev/null 2>&1; then
-        chafa --size=60x20 "$human_path" 2>/dev/null || true
-    elif command -v viu >/dev/null 2>&1; then
-        viu -w 60 "$human_path" 2>/dev/null || true
-    elif command -v kitty >/dev/null 2>&1; then
-        kitty +kitten icat --clear --transfer-mode=file --place=60x20@0x0 "$human_path" 2>/dev/null || true
-    elif command -v wezterm >/dev/null 2>&1; then
-        wezterm imgcat "$human_path" 2>/dev/null || true
-    elif command -v imgcat >/dev/null 2>&1; then
-        imgcat "$human_path" 2>/dev/null || true
+        preview_size=${SIZES_IMAGE_PREVIEW_SIZE:-56x16}
+        chafa --format=symbols --size="$preview_size" "$human_path" 2>/dev/null || \
+            printf '%s\n' 'Image preview failed. Try a newer chafa or unset SIZES_IMAGE_PREVIEW.'
     else
-        printf '%s\n' 'Set SIZES_IMAGE_PREVIEW=1 and install chafa/viu/kitty/wezterm/imgcat for image previews.'
+        printf '%s\n' 'Set SIZES_IMAGE_PREVIEW=1 and install chafa for safe text image previews.'
     fi
 }
-
 case "$mode" in
     help)
         cat <<'HELP'
@@ -2152,6 +2160,73 @@ run_interactive_empty_state() {
     rm -f "$empty_file"
 }
 
+
+interactive_allow_delete() {
+    [ "$allow_delete" -eq 1 ] || [ "${SIZES_ALLOW_DELETE:-0}" = "1" ]
+}
+
+interactive_trash_path() {
+    target=$1
+
+    if [ "${SIZES_TRASH_CMD:-}" != "" ]; then
+        "$SIZES_TRASH_CMD" "$target"
+        return $?
+    fi
+
+    if command -v gio >/dev/null 2>&1; then
+        gio trash "$target"
+    elif command -v trash-put >/dev/null 2>&1; then
+        trash-put "$target"
+    elif command -v kioclient5 >/dev/null 2>&1; then
+        kioclient5 move "$target" trash:/
+    elif command -v kioclient >/dev/null 2>&1; then
+        kioclient move "$target" trash:/
+    elif command -v gvfs-trash >/dev/null 2>&1; then
+        gvfs-trash "$target"
+    else
+        return 127
+    fi
+}
+
+interactive_confirm_permanent_delete() {
+    kind=$1
+    target=$2
+    phrase=$3
+
+    if [ ! -r /dev/tty ] || [ ! -w /dev/tty ]; then
+        return 2
+    fi
+
+    {
+        printf '\n%s\n' 'sizes: permanent delete requested'
+        printf '%s\n' 'This cannot be undone.'
+        printf '%s: %s\n' "$kind" "$target"
+        printf 'Type %s to continue: ' "$phrase"
+    } >/dev/tty
+
+    IFS= read -r answer </dev/tty || return 1
+    [ "$answer" = "$phrase" ]
+}
+
+interactive_permanent_delete_path() {
+    kind=$1
+    target=$2
+
+    interactive_allow_delete || return 3
+
+    case "$kind" in
+        dir) phrase='DELETE DIR' ;;
+        *) phrase='DELETE' ;;
+    esac
+
+    interactive_confirm_permanent_delete "$kind" "$target" "$phrase" || return $?
+
+    case "$kind" in
+        dir) rm -rf -- "$target" ;;
+        *) rm -f -- "$target" ;;
+    esac
+}
+
 run_file_action_menu() {
     fzf_cmd=$1
     selected_file=$2
@@ -2184,6 +2259,8 @@ copy-quoted${field_sep}Copy quoted path
 path${field_sep}Show full path
 quoted-path${field_sep}Print quoted path
 details${field_sep}Print details
+trash${field_sep}Trash file
+delete${field_sep}Delete permanently
 back${field_sep}Back
 quit${field_sep}Quit
 EOF
@@ -2204,6 +2281,8 @@ EOF
         printf '%-10s %s\n' 'Ctrl-Y' 'copy path'
         printf '%-10s %s\n' 'Ctrl-L' 'reveal full path'
         printf '%-10s %s\n' 'Open with' 'uses SIZES_OPEN_WITH or prompts'
+        printf '%-10s %s\n' 'Trash' 'moves to system trash; never falls back to rm'
+        printf '%-10s %s\n' 'Delete' 'requires --allow-delete and typed confirmation'
         printf '%-10s %s\n' 'Back/Quit' 'return or exit interactive mode'
     } >"$item_file"
 
@@ -2288,6 +2367,33 @@ $(interactive_shell_quote "$path")"
 $(interactive_shell_quote "$path")"
             fi
             ;;
+        trash)
+            if interactive_trash_path "$path"; then
+                run_interactive_notice "$fzf_cmd" 'sizes › trashed file' "Moved file to trash:
+$path"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › trash unavailable' "Could not move file to trash. Install gio/trash-cli/KDE trash support or set SIZES_TRASH_CMD.
+
+Path:
+$path"
+            fi
+            ;;
+        delete)
+            if interactive_permanent_delete_path file "$path"; then
+                run_interactive_notice "$fzf_cmd" 'sizes › deleted file' "Deleted file permanently:
+$path"
+            else
+                status=$?
+                case "$status" in
+                    3) run_interactive_notice "$fzf_cmd" 'sizes › delete disabled' "Permanent delete is disabled.
+
+Run with --allow-delete or set SIZES_ALLOW_DELETE=1 to enable it." ;;
+                    2) run_interactive_notice "$fzf_cmd" 'sizes › cannot confirm delete' "Permanent delete needs a controlling terminal for typed confirmation." ;;
+                    *) run_interactive_notice "$fzf_cmd" 'sizes › delete cancelled' "Permanent delete cancelled or failed:
+$path" ;;
+                esac
+            fi
+            ;;
         path|full-path) run_interactive_notice "$fzf_cmd" 'sizes › full path' "$path" ;;
         quoted-path) printf '%s\n' "$(interactive_shell_quote "$path")" ;;
         details) print_selected_file "$selected_file" ;;
@@ -2332,6 +2438,8 @@ copy-quoted${field_sep}Copy quoted path
 path${field_sep}Show full path
 quoted-path${field_sep}Print quoted path
 details${field_sep}Print details
+trash${field_sep}Trash directory
+delete${field_sep}Delete permanently
 back${field_sep}Back
 quit${field_sep}Quit
 EOF
@@ -2352,6 +2460,8 @@ EOF
         printf '%-10s %s\n' 'Ctrl-Y' 'copy path'
         printf '%-10s %s\n' 'Ctrl-L' 'reveal full path'
         printf '%-10s %s\n' 'Open with' 'uses SIZES_OPEN_WITH or prompts'
+        printf '%-10s %s\n' 'Trash' 'moves to system trash; never falls back to rm'
+        printf '%-10s %s\n' 'Delete' 'requires --allow-delete and typed confirmation'
         printf '%-10s %s\n' 'Back/Quit' 'return or exit interactive mode'
     } >"$item_file"
 
@@ -2429,6 +2539,33 @@ $(interactive_shell_quote "$path")"
             else
                 run_interactive_notice "$fzf_cmd" 'sizes › copy unavailable' "No clipboard tool found. Quoted path:
 $(interactive_shell_quote "$path")"
+            fi
+            ;;
+        trash)
+            if interactive_trash_path "$path"; then
+                run_interactive_notice "$fzf_cmd" 'sizes › trashed directory' "Moved directory to trash:
+$path"
+            else
+                run_interactive_notice "$fzf_cmd" 'sizes › trash unavailable' "Could not move directory to trash. Install gio/trash-cli/KDE trash support or set SIZES_TRASH_CMD.
+
+Path:
+$path"
+            fi
+            ;;
+        delete)
+            if interactive_permanent_delete_path dir "$path"; then
+                run_interactive_notice "$fzf_cmd" 'sizes › deleted directory' "Deleted directory permanently:
+$path"
+            else
+                status=$?
+                case "$status" in
+                    3) run_interactive_notice "$fzf_cmd" 'sizes › delete disabled' "Permanent delete is disabled.
+
+Run with --allow-delete or set SIZES_ALLOW_DELETE=1 to enable it." ;;
+                    2) run_interactive_notice "$fzf_cmd" 'sizes › cannot confirm delete' "Permanent delete needs a controlling terminal for typed confirmation." ;;
+                    *) run_interactive_notice "$fzf_cmd" 'sizes › delete cancelled' "Permanent delete cancelled or failed:
+$path" ;;
+                esac
             fi
             ;;
         path|full-path) run_interactive_notice "$fzf_cmd" 'sizes › full path' "$path" ;;
