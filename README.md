@@ -48,7 +48,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.profile
 - GNU `find` (`find -printf` is required). Linux usually already has it.
 - macOS: `brew install findutils`.
 - Interactive mode: `fzf`.
-- Optional image previews: `SIZES_IMAGE_PREVIEW=1` plus `chafa`, `viu`, `kitty`, `wezterm`, or `imgcat`.
+- Optional image previews: `SIZES_IMAGE_PREVIEW=1` plus `chafa`. Previews are text/ANSI-only so they stay inside the fzf preview pane.
 
 ## Quick use
 
@@ -139,7 +139,7 @@ JSON output includes scan metadata and rows:
 
 ```json
 {
-  "version": "0.7.7",
+  "version": "0.7.8",
   "root": ".",
   "mode": "recursive",
   "total_bytes": 123456,
@@ -189,7 +189,8 @@ CLICOLOR=0                 disable colors
 SIZES_EXCLUDE=".git node_modules"
 SIZES_DEBUG_TIMING=1       print timing diagnostics
 SIZES_FZF=/path/to/fzf     override fzf command
-SIZES_IMAGE_PREVIEW=1      enable image previews in interactive mode
+SIZES_IMAGE_PREVIEW=1      enable safe chafa text previews in interactive mode
+SIZES_IMAGE_PREVIEW_SIZE=56x16 set chafa preview size
 SIZES_INTERACTIVE_PREVIEW=0 start interactive previews hidden
 SIZES_OPEN_WITH=cmd        default command for interactive Open with…
 SIZES_UPGRADE_URL=...      override upgrade source

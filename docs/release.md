@@ -1,4 +1,5 @@
-# v0.7.7
+# v0.7.8
 
-- Fix interactive file/directory browsers losing the selected row after action menus.
-- Restore cursor position without leaking the selected path into the search query.
+- Fix optional image previews drawing over the interactive browser.
+- Limit fzf image previews to safe chafa text/symbol output.
+- Add `SIZES_IMAGE_PREVIEW_SIZE` for preview sizing.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.8
+
+- Fix optional image previews so they no longer use terminal graphics protocols inside fzf preview panes.
+- Use chafa symbol/text rendering only, preventing image previews from drawing over the browser or leaving stale graphics behind.
+- Add `SIZES_IMAGE_PREVIEW_SIZE` for tuning the chafa preview size.
+
 ## 0.7.7
 
 - Preserve file and directory browser cursor position after returning from action menus using fzf's load event.

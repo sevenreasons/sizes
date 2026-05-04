@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.7"
+VERSION="0.7.8"
 
 usage() {
     cat <<'USAGE'
@@ -1768,23 +1768,22 @@ preview_image() {
     [ "${SIZES_IMAGE_PREVIEW:-}" != "" ] || return 0
     [ -f "$human_path" ] || return 0
     is_image_ext "$ext" || return 0
+
     printf '\n%s\n' 'Image preview'
     printf '%s\n' '─────────────'
+
+    # fzf preview panes are not a safe place for terminal graphics protocols
+    # such as kitty/wezterm/imgcat/viu: they can draw outside the preview pane
+    # and leave stale images behind after scrolling or leaving the browser.
+    # Use chafa in symbol mode only so previews stay text/ANSI-bound.
     if command -v chafa >/dev/null 2>&1; then
-        chafa --size=60x20 "$human_path" 2>/dev/null || true
-    elif command -v viu >/dev/null 2>&1; then
-        viu -w 60 "$human_path" 2>/dev/null || true
-    elif command -v kitty >/dev/null 2>&1; then
-        kitty +kitten icat --clear --transfer-mode=file --place=60x20@0x0 "$human_path" 2>/dev/null || true
-    elif command -v wezterm >/dev/null 2>&1; then
-        wezterm imgcat "$human_path" 2>/dev/null || true
-    elif command -v imgcat >/dev/null 2>&1; then
-        imgcat "$human_path" 2>/dev/null || true
+        preview_size=${SIZES_IMAGE_PREVIEW_SIZE:-56x16}
+        chafa --format=symbols --size="$preview_size" "$human_path" 2>/dev/null || \
+            printf '%s\n' 'Image preview failed. Try a newer chafa or unset SIZES_IMAGE_PREVIEW.'
     else
-        printf '%s\n' 'Set SIZES_IMAGE_PREVIEW=1 and install chafa/viu/kitty/wezterm/imgcat for image previews.'
+        printf '%s\n' 'Set SIZES_IMAGE_PREVIEW=1 and install chafa for safe text image previews.'
     fi
 }
-
 case "$mode" in
     help)
         cat <<'HELP'
