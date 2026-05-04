@@ -1,12 +1,13 @@
-# Release v0.6.2
+# Release v0.7.0
 
-Interactive navigation polish.
+Polishes interactive mode into a more cohesive terminal UI.
 
-- Add back navigation with `Esc` and `Ctrl-B`.
-- Add `Ctrl-Q` to quit from nested views.
-- Add breadcrumb prompts across interactive views.
-- Preserve selection when returning from drilldown views.
-- Make file and directory `Enter` behavior open action menus consistently.
-- Improve file and directory action menus.
-- Add empty-state screens.
-- Add `Refresh scan` / `Ctrl-R` from the main menu.
+- Unified interactive layout with consistent breadcrumbs and shortcut hints.
+- Cleaner main menu.
+- Compact card-style previews.
+- Middle-truncated paths for long filenames.
+- Cleaner file and directory drilldown rows.
+- Contextual help per screen.
+- Feedback after open/copy actions.
+- Better empty states and scan handoff text.
+- Tuned terminal-size-aware preview layout.

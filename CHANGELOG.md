@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.2
+## 0.7.0
 
 - Add back navigation in interactive mode with `Esc` and `Ctrl-B`.
 - Add `Ctrl-Q` to quit interactive mode from nested views.

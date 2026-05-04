@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.6.2"
+VERSION="0.7.0"
 
 usage() {
     cat <<'USAGE'
@@ -1458,50 +1458,85 @@ case "$target" in
 esac
 
 if [ "$preview_mode" = "help" ] || [ "$target" = "HELP" ]; then
-    cat <<'HELP'
-sizes interactive help
-──────────────────────
+    case "$preview_mode" in
+        main-help|help)
+            cat <<'HELP'
+sizes › main
+────────────
 
-Main menu
-  Extensions      browse extension summary
-  Types           browse extension categories
-  Top files       browse largest files overall
-  Top directories browse largest directories overall
-  By directory    browse directory summaries
+Enter    open selected mode
+Ctrl-R   refresh scan
+Esc      quit
+Ctrl-Q   quit
+/        search menu
 
-Navigation
-  Esc      go back one menu
-  Ctrl-B   go back one menu
-  Ctrl-Q   quit interactive mode
-  Ctrl-R   refresh/rescan from the main menu
-
-Extension / type browsers
-  /        search
-  Enter    open selectable files / extensions
-  Ctrl-F   open selectable files
-  Ctrl-D   open selectable directories
-  ?        show help preview
-
-File browser
-  Tab      mark multiple files
-  Enter    action menu
-  Ctrl-O   open selected file
-  Ctrl-P   open containing folder
-  Ctrl-Y   copy selected path
-
-Directory browser
-  Enter    action menu
-  Ctrl-O   open directory
-  Ctrl-Y   copy path
-
-Preview
-  Alt-J/K  scroll down/up
-  Alt-D/U  page down/up
-  Alt-T/B  top/bottom
-
-Optional image preview
-  SIZES_IMAGE_PREVIEW=1 enables image previews when chafa, viu, kitty, wezterm, or imgcat is available.
+Views
+  Extensions       extension totals → files / directories
+  Types            category totals → extensions / files / dirs
+  Top files        largest files in the scan
+  Top directories  largest directories in the scan
+  By directory     directory summaries
 HELP
+            ;;
+        type-help)
+            cat <<'HELP'
+sizes › types
+─────────────
+
+Enter    browse extensions in selected type
+Ctrl-F   browse files in selected type
+Ctrl-D   browse directories in selected type
+?        show help
+Esc      back
+Ctrl-Q   quit
+HELP
+            ;;
+        file-help)
+            cat <<'HELP'
+sizes › files
+─────────────
+
+Enter    action menu
+Tab      select multiple files
+Ctrl-O   open selected file
+Ctrl-P   open containing folder
+Ctrl-Y   copy selected path
+?        show help
+Esc      back
+Ctrl-Q   quit
+
+Preview: Alt-J/K scroll · Alt-U/D page · Alt-T/B top/bottom
+HELP
+            ;;
+        dir-help)
+            cat <<'HELP'
+sizes › directories
+──────────────────
+
+Enter    action menu
+Ctrl-O   open selected directory
+Ctrl-Y   copy selected path
+?        show help
+Esc      back
+Ctrl-Q   quit
+
+Preview: Alt-J/K scroll · Alt-U/D page · Alt-T/B top/bottom
+HELP
+            ;;
+        *)
+            cat <<'HELP'
+sizes › extensions
+──────────────────
+
+Enter    browse files for selected extension
+Ctrl-F   browse files for selected extension
+Ctrl-D   browse directories for selected extension
+?        show help
+Esc      back
+Ctrl-Q   quit
+HELP
+            ;;
+    esac
     exit 0
 fi
 
@@ -1511,8 +1546,10 @@ if [ "$target" = "" ]; then
 fi
 
 if [ "$target" = "OTHER" ]; then
-    printf '%s\n' 'OTHER is a folded summary row.'
-    printf '%s\n' 'Use a higher --limit or remove min filters to inspect specific extensions.'
+    printf '%s\n' 'OTHER'
+    printf '%s\n\n' '─────'
+    printf '%s\n' 'This is a folded summary row.'
+    printf '%s\n' 'Try increasing --limit or removing min filters.'
     exit 0
 fi
 
@@ -1549,9 +1586,14 @@ case "$preview_mode" in
                 if (u == 1) return sprintf("%.0f %s", n, units[u])
                 return sprintf("%.2f %s", n, units[u])
             }
+            function middle(s, w,    keep, left, right) {
+                if (length(s) <= w) return s
+                keep = w - 3; left = int(keep * 0.42); right = keep - left
+                return substr(s, 1, left) "..." substr(s, length(s) - right + 1)
+            }
             BEGIN { title = target == "TOTAL" ? "Top directories overall" : "Top directories for " label }
             NR == 1 { print title; print "" }
-            NR <= 30 { seen = 1; printf "%11s  %8d  %s\n", human($1), $2, $3 }
+            NR <= 30 { seen = 1; printf "%11s  %8d  %s\n", human($1), $2, middle($3, 96) }
             END { if (!seen) { print title; print ""; print "No matching directories." } }'
         ;;
     files)
@@ -1567,9 +1609,14 @@ case "$preview_mode" in
                 if (u == 1) return sprintf("%.0f %s", n, units[u])
                 return sprintf("%.2f %s", n, units[u])
             }
+            function middle(s, w,    keep, left, right) {
+                if (length(s) <= w) return s
+                keep = w - 3; left = int(keep * 0.42); right = keep - left
+                return substr(s, 1, left) "..." substr(s, length(s) - right + 1)
+            }
             BEGIN { title = target == "TOTAL" ? "Top files overall" : "Top files for " label }
             NR == 1 { if (target != "TOTAL" && $4 != "") title = title " (" $4 ")"; print title; print "" }
-            NR <= 30 { seen = 1; printf "%11s  %s\n", human($1), $2 }
+            NR <= 30 { seen = 1; printf "%11s  %s\n", human($1), middle($2, 104) }
             END { if (!seen) { print title; print ""; print "No matching files." } }'
         ;;
     *)
@@ -1610,7 +1657,11 @@ run_interactive_scan() {
         progress_count_file=$(mktemp "${TMPDIR:-/tmp}/sizes-progress.XXXXXX") || exit 1
         progress_err=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-stderr.XXXXXX") || exit 1
 
-        generate_interactive_data "$records_file" >"$summary_file" 2>"$progress_err" &
+        printf '%s
+' "sizes: scanning $dir ($mode)..." >&2
+        printf '%s
+' "sizes: scanning $dir ($mode)..." >&2
+    generate_interactive_data "$records_file" >"$summary_file" 2>"$progress_err" &
         progress_pid=$!
         progress_i=0
 
@@ -1641,6 +1692,8 @@ run_interactive_scan() {
         return "$progress_status"
     fi
 
+    printf '%s
+' "sizes: scanning $dir ($mode)..." >&2
     generate_interactive_data "$records_file" >"$summary_file"
 }
 
@@ -1650,7 +1703,7 @@ interactive_select_parts() {
     second=$(printf '%s\n' "$fzf_output" | sed -n '2p')
 
     case "$first" in
-        enter|ctrl-f|ctrl-d|ctrl-o|ctrl-p|ctrl-y|ctrl-a|ctrl-b|ctrl-t)
+        enter|ctrl-f|ctrl-d|ctrl-o|ctrl-p|ctrl-y|ctrl-a|ctrl-b|ctrl-t|ctrl-r)
             printf '%s\n%s\n' "$first" "$second"
             ;;
         '')
@@ -1707,6 +1760,25 @@ preview_image() {
 }
 
 case "$mode" in
+    help)
+        cat <<'HELP'
+sizes › files / directories
+──────────────────────────
+
+Enter    action menu
+Tab      select multiple files
+Ctrl-O   open selected item
+Ctrl-P   open containing folder for files
+Ctrl-Y   copy selected path
+Esc      back
+Ctrl-Q   quit
+
+Preview scrolling
+  Alt-J/K  down/up
+  Alt-D/U  page down/up
+  Alt-T/B  top/bottom
+HELP
+        ;;
     dir)
         printf '%s\n' 'Directory'
         printf '%s\n\n' '─────────'
@@ -1781,6 +1853,7 @@ copy_path() {
         printf '%s' "$path" | clip.exe
     else
         printf '%s\n' "$path"
+        exit 2
     fi
 }
 
@@ -1828,10 +1901,14 @@ make_interactive_file_list() {
             if (u == 1) return sprintf("%.0f %s", n, units[u])
             return sprintf("%.2f %s", n, units[u])
         }
-        function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+        function middle(s, w,    keep, left, right) {
+            if (length(s) <= w) return s
+            keep = w - 3; left = int(keep * 0.42); right = keep - left
+            return substr(s, 1, left) "..." substr(s, length(s) - right + 1)
+        }
         {
             size_h = human($1)
-            display = sprintf("%11s  %s", size_h, clip($2, 140))
+            display = sprintf("%11s  %-8s  %s", size_h, $3, middle($2, 128))
             print $2, display, $3, $4, $1, size_h
         }
     ' >"$out_file"
@@ -1880,10 +1957,14 @@ make_interactive_dir_list() {
             while (length(s) > 3) { out = "," substr(s, length(s) - 2) out; s = substr(s, 1, length(s) - 3) }
             return s out
         }
-        function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+        function middle(s, w,    keep, left, right) {
+            if (length(s) <= w) return s
+            keep = w - 3; left = int(keep * 0.42); right = keep - left
+            return substr(s, 1, left) "..." substr(s, length(s) - right + 1)
+        }
         {
             size_h = human($1)
-            display = sprintf("%11s  %8s  %s", size_h, commas($3), clip($2, 140))
+            display = sprintf("%11s  %8s  %s", size_h, commas($3), middle($2, 130))
             print $2, display, $4, $5, $1, size_h, $3
         }
     ' >"$out_file"
@@ -1960,6 +2041,32 @@ interactive_quit_requested() {
 
 interactive_common_bindings() {
     printf '%s' "ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort,alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom"
+}
+
+interactive_screen_header() {
+    title=$1
+    hint=$2
+    columns=${3:-}
+    if [ "$columns" != "" ]; then
+        printf '%s
+%s
+%s' "$title" "$hint" "$columns"
+    else
+        printf '%s
+%s' "$title" "$hint"
+    fi
+}
+
+run_interactive_notice() {
+    fzf_cmd=$1
+    title=$2
+    message=$3
+
+    notice_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-notice.XXXXXX") || exit 1
+    printf '%s
+' "$message" >"$notice_file"
+    "$fzf_cmd"         --ansi         --no-sort         --header="$title"         --prompt='back> '         --layout=reverse         --info=inline-right         --bind="ctrl-b:abort,ctrl-q:execute-silent(touch $interactive_quit_file)+abort"         --height='50%'         --border         <"$notice_file" >/dev/null 2>&1 || true
+    rm -f "$notice_file"
 }
 
 run_interactive_empty_state() {
@@ -2061,7 +2168,9 @@ EOF
     action=$(printf '%s\n' "$choice" | awk -F"$field_sep" '{print $1}')
     path=$(printf '%s\n' "$selected_dir" | awk -F"$field_sep" '{print $1}')
     case "$action" in
-        open) "$open_script" "$path" open-dir ;;
+        open) if "$open_script" "$path" open-dir; then run_interactive_notice "$fzf_cmd" 'sizes › opened directory' "Opened directory:
+$path"; else run_interactive_notice "$fzf_cmd" 'sizes › open failed' "Could not open directory:
+$path"; fi ;;
         browse)
             tmp_records=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-dir-records.XXXXXX") || exit 1
             awk -F"$field_sep" -v p="$path" '($2 == p || index($2, p "/") == 1) { print }' "$records_file" >"$tmp_records"
@@ -2103,7 +2212,7 @@ run_interactive_file_browser() {
         fi
 
         preview_window=$(interactive_preview_window)
-        title=$(printf 'sizes › files › %s · Tab multi · Enter actions · Ctrl-O open · Ctrl-P folder · Ctrl-Y copy · Ctrl-B/Esc back · Ctrl-Q quit' "$label")
+        title=$(interactive_screen_header "sizes › files › $label" 'Enter actions · Tab select · Ctrl-O open · Ctrl-P folder · Ctrl-Y copy · ? help · Esc back · Ctrl-Q quit' 'SIZE         EXT       PATH')
         common_bindings=$(interactive_common_bindings)
         fzf_out=$("$fzf_cmd" \
             --ansi \
@@ -2178,7 +2287,7 @@ run_interactive_dir_browser() {
         fi
 
         preview_window=$(interactive_preview_window)
-        title=$(printf 'sizes › dirs › %s · Enter actions · Ctrl-O open · Ctrl-Y copy · Ctrl-B/Esc back · Ctrl-Q quit' "$label")
+        title=$(interactive_screen_header "sizes › dirs › $label" 'Enter actions · Ctrl-O open · Ctrl-Y copy · ? help · Esc back · Ctrl-Q quit' 'SIZE         FILES     PATH')
         common_bindings=$(interactive_common_bindings)
         fzf_out=$("$fzf_cmd" \
             --ansi \
@@ -2238,10 +2347,10 @@ run_interactive_extension_browser() {
 
         preview_window=$(interactive_preview_window)
         if [ "$type_filter" = "" ]; then
-            title='sizes › extensions · Enter/Ctrl-F files · Ctrl-D dirs · ? help · Ctrl-B/Esc back · Ctrl-Q quit'
+            title=$(interactive_screen_header 'sizes › extensions' 'Enter/Ctrl-F files · Ctrl-D dirs · ? help · Esc back · Ctrl-Q quit' 'EXT           TYPE          SIZE       FILES      SHARE')
             prompt='sizes › extensions> '
         else
-            title=$(printf 'sizes › types › %s › extensions · Enter/Ctrl-F files · Ctrl-D dirs · ? help · Ctrl-B/Esc back · Ctrl-Q quit' "$type_filter")
+            title=$(interactive_screen_header "sizes › types › $type_filter › extensions" 'Enter/Ctrl-F files · Ctrl-D dirs · ? help · Esc back · Ctrl-Q quit' 'EXT           TYPE          SIZE       FILES      SHARE')
             prompt=$(printf 'sizes › types › %s › extensions> ' "$type_filter")
         fi
 
@@ -2259,7 +2368,7 @@ run_interactive_extension_browser() {
             --layout=reverse \
             --info=inline-right \
             --preview="$preview_script '$records_file' {1} summary" \
-            --bind="?:change-preview($preview_script '$records_file' HELP help),$common_bindings" \
+            --bind="?:change-preview($preview_script '$records_file' HELP ext-help),$common_bindings" \
             --preview-window="$preview_window" \
             --height='95%' \
             --border \
@@ -2312,13 +2421,13 @@ run_interactive_type_browser() {
             --expect=enter,ctrl-f,ctrl-d \
             --delimiter="$field_sep" \
             --with-nth=2 \
-            --header='sizes › types · Enter extensions · Ctrl-F files · Ctrl-D dirs · ? help · Ctrl-B/Esc back · Ctrl-Q quit' \
+            --header="$(interactive_screen_header 'sizes › types' 'Enter extensions · Ctrl-F files · Ctrl-D dirs · ? help · Esc back · Ctrl-Q quit' 'TYPE             SIZE      FILES')" \
             --prompt='sizes › types> ' \
             --query="$query" \
             --layout=reverse \
             --info=inline-right \
             --preview="$preview_script '$records_file' {1} summary" \
-            --bind="?:change-preview($preview_script '$records_file' HELP help),$common_bindings" \
+            --bind="?:change-preview($preview_script '$records_file' HELP type-help),$common_bindings" \
             --preview-window="$preview_window" \
             --height='95%' \
             --border \
@@ -2356,13 +2465,14 @@ run_interactive_start_menu() {
     while ! interactive_quit_requested; do
         menu_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-menu.XXXXXX") || exit 1
         cat >"$menu_file" <<EOF
-extensions${field_sep}Extensions       Browse extension summary, then drill into files or directories
-types${field_sep}Types            Browse by extension category such as video, image, archive, model
-top-files${field_sep}Top files        Browse the largest files across the scan
-top-dirs${field_sep}Top directories  Browse the largest directories across the scan
+extensions${field_sep}Extensions       Browse extension totals and drill into files/directories
+types${field_sep}Types            Browse categories like image, video, archive, model
+top-files${field_sep}Top files        Browse largest files in this scan
+top-dirs${field_sep}Top directories  Browse largest directories in this scan
 by-dir${field_sep}By directory     Browse directory summaries
-refresh${field_sep}Refresh scan     Rescan with the same options
-help${field_sep}Help             Show interactive shortcuts and behavior
+refresh${field_sep}Refresh scan     Rescan current path with the same options
+help${field_sep}Help             Show contextual shortcuts
+quit${field_sep}Quit             Exit interactive mode
 EOF
 
         preview_window=$(interactive_preview_window)
@@ -2373,12 +2483,12 @@ EOF
             --expect=enter,ctrl-r \
             --delimiter="$field_sep" \
             --with-nth=2 \
-            --header='sizes › main · choose a mode · Ctrl-R refresh · Ctrl-Q quit' \
+            --header="$(interactive_screen_header 'sizes › main' 'Enter open · Ctrl-R refresh · Esc quit · Ctrl-Q quit' 'MODE             DESCRIPTION')" \
             --prompt='sizes › main> ' \
             --query="$query" \
             --layout=reverse \
             --info=inline-right \
-            --preview="$preview_script '$records_file' HELP help" \
+            --preview="$preview_script '$records_file' HELP main-help" \
             --preview-window="$preview_window" \
             --height='95%' \
             --border \
@@ -2403,15 +2513,32 @@ EOF
                 if ! run_interactive_scan "$summary_file" "$records_file"; then
                     return 1
                 fi
+                print_interactive_scan_summary "$records_file"
                 ;;
             types) run_interactive_type_browser "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" ;;
             top-files) run_interactive_file_browser "$fzf_cmd" "$records_file" TOTAL "$item_preview_script" "$open_script" ;;
             top-dirs|by-dir) run_interactive_dir_browser "$fzf_cmd" "$records_file" TOTAL "$item_preview_script" "$open_script" ;;
-            help) "$preview_script" "$records_file" HELP help ;;
+            help) "$preview_script" "$records_file" HELP main-help ;;
+            quit) return 0 ;;
             extensions|'') run_interactive_extension_browser "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script" "" ;;
             *) : ;;
         esac
     done
+}
+
+print_interactive_scan_summary() {
+    records_file=$1
+    awk -F"$field_sep" '
+        function human(n,    u, units) {
+            split("B KiB MiB GiB TiB PiB", units, " ")
+            u = 1
+            while (n >= 1024 && u < 6) { n /= 1024; u++ }
+            if (u == 1) return sprintf("%.0f %s", n, units[u])
+            return sprintf("%.2f %s", n, units[u])
+        }
+        { bytes += $1; files += 1 }
+        END { printf "sizes: scanned %d files · %s · opening interactive browser...\n", files, human(bytes) }
+    ' "$records_file" >&2
 }
 
 run_interactive() {
@@ -2445,6 +2572,7 @@ run_interactive() {
         return 0
     fi
 
+    print_interactive_scan_summary "$records_file"
     run_interactive_start_menu "$fzf_cmd" "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
 
     print_errors
