@@ -1,3 +1,10 @@
+## 0.5.4
+
+- Polish `--interactive` layout so headers stay at the top and the left pane stays readable.
+- Simplify right-side previews by showing size/path lists instead of boxed tables.
+- Simplify file and directory browsers by removing repeated type columns from the selectable list.
+- Add `Ctrl-O` in the file browser to open the selected file with the default associated app.
+
 # Changelog
 
 ## 0.5.3

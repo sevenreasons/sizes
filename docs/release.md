@@ -1,20 +1,16 @@
 # Release notes
 
-## v0.5.3
+## v0.5.4
 
-- Make `--interactive` a real drilldown flow.
-- Extension rows are still searchable, colored, aligned, and size-sorted.
-- `Enter` / `Ctrl-F` opens a selectable file browser for the chosen extension.
-- `Ctrl-D` opens a selectable directory browser for the chosen extension.
-- File and directory browsers include preview panes and selected-item output.
-
-## Release checklist
+- Polish interactive layout so headers stay at the top.
+- Keep the left pane readable by reducing preview width.
+- Simplify preview panes to size/path style output.
+- Simplify file and directory browsers by removing repeated type columns.
+- Add `Ctrl-O` to open the selected file with the default associated app.
 
 ```sh
-sh tests/run.sh
-shellcheck sizes.sh sizes tests/run.sh
 git add -A
-git commit -m "Add interactive file and directory drilldown for v0.5.3"
-git tag -f v0.5.3
+git commit -m "Polish interactive layout and file opener for v0.5.4"
+git tag -f v0.5.4
 git push origin master --tags
 ```

@@ -121,7 +121,7 @@ sizes --no-color                   # no ANSI colors
 - `--include` filters are pushed into `find` where possible, reducing work on large trees.
 - `--top-files` streams candidates through `sort` instead of storing all matches in memory.
 - `--top-dirs` and `--by-dir` help locate where space is coming from.
-- `--interactive` opens an `fzf` browser with aligned colored rows, stable size ordering, search, and previews. Press `Enter` or `Ctrl-F` on an extension to open a selectable file browser; press `Ctrl-D` to open a selectable directory browser. Use `Alt-J/K` to scroll previews, `Alt-U/D` to page them, and `Alt-T/B` for top/bottom.
+- `--interactive` opens an `fzf` browser with aligned colored rows, stable size ordering, search, and previews. Press `Enter` or `Ctrl-F` on an extension to open a selectable file browser; press `Ctrl-D` to open a selectable directory browser. File and directory browsers use the same aligned style, keep the left pane readable, and use a simplified preview. In the file browser, press `Ctrl-O` to open the selected file with the default associated app. Use `Alt-J/K` to scroll previews, `Alt-U/D` to page them, and `Alt-T/B` for top/bottom.
 - JSON output includes metadata such as version, root, mode, elapsed time, skipped paths, partial status, totals, and rows.
 - `--save` writes the selected output directly to a file and infers JSON/CSV/TSV from the filename.
 - Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, `SIZES_FZF=...`, and `SIZES_UPGRADE_URL=...`.

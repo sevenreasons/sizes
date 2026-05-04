@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.5.3"
+VERSION="0.5.4"
 
 usage() {
     cat <<'USAGE'
@@ -1471,11 +1471,10 @@ case "$preview_mode" in
                 d = dirname($2)
                 bytes[d] += $1
                 files[d] += 1
-                total += $1
-                total_files += 1
+                if (kind == "") kind = $4
             }
             END {
-                for (d in bytes) printf "%.0f%s%d%s%s\n", bytes[d], FS, files[d], FS, d
+                for (d in bytes) printf "%.0f%s%d%s%s%s%s\n", bytes[d], FS, files[d], FS, d, FS, kind
             }' "$records_file" \
         | LC_ALL=C sort -t "$field_sep" -k1,1nr \
         | awk -F"$field_sep" -v target="$ext" '
@@ -1486,24 +1485,26 @@ case "$preview_mode" in
                 if (u == 1) return sprintf("%9.0f %s", n, units[u])
                 return sprintf("%9.2f %s", n, units[u])
             }
-            function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
             BEGIN {
                 title = target == "TOTAL" ? "Top directories overall" : "Top directories for " target
-                top = "╭────────────────┬───────────┬────────────────────────────────────────────────────────────╮"
-                mid = "├────────────────┼───────────┼────────────────────────────────────────────────────────────┤"
-                bottom = "╰────────────────┴───────────┴────────────────────────────────────────────────────────────╯"
-                print title
-                print top
-                printf "│ %14s │ %9s │ %-58s │\n", "SIZE", "FILES", "DIR"
-                print mid
             }
-            NR <= 20 {
+            NR == 1 {
+                if (target != "TOTAL" && $4 != "") title = title " (" $4 ")"
+                print title
+                print ""
+                printf "%-14s  %8s  %s\n", "SIZE", "FILES", "DIR"
+                printf "%-14s  %8s  %s\n", "────────────", "─────", "────────────────────────────────────────"
+            }
+            NR <= 30 {
                 seen = 1
-                printf "│ %14s │ %9d │ %-58s │\n", human($1), $2, clip($3, 58)
+                printf "%14s  %8d  %s\n", human($1), $2, $3
             }
             END {
-                if (!seen) printf "│ %14s │ %9s │ %-58s │\n", "-", "-", "No matching directories"
-                print bottom
+                if (!seen) {
+                    print title
+                    print ""
+                    print "No matching directories."
+                }
             }'
         ;;
     *)
@@ -1519,24 +1520,26 @@ case "$preview_mode" in
                 if (u == 1) return sprintf("%9.0f %s", n, units[u])
                 return sprintf("%9.2f %s", n, units[u])
             }
-            function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
             BEGIN {
                 title = target == "TOTAL" ? "Top files overall" : "Top files for " target
-                top = "╭────────────────┬──────────┬────────────────────────────────────────────────────────────╮"
-                mid = "├────────────────┼──────────┼────────────────────────────────────────────────────────────┤"
-                bottom = "╰────────────────┴──────────┴────────────────────────────────────────────────────────────╯"
-                print title
-                print top
-                printf "│ %14s │ %-8s │ %-58s │\n", "SIZE", "TYPE", "PATH"
-                print mid
             }
-            NR <= 20 {
+            NR == 1 {
+                if (target != "TOTAL" && $4 != "") title = title " (" $4 ")"
+                print title
+                print ""
+                printf "%-14s  %s\n", "SIZE", "PATH"
+                printf "%-14s  %s\n", "────────────", "────────────────────────────────────────"
+            }
+            NR <= 30 {
                 seen = 1
-                printf "│ %14s │ %-8s │ %-58s │\n", human($1), $4, clip($2, 58)
+                printf "%14s  %s\n", human($1), $2
             }
             END {
-                if (!seen) printf "│ %14s │ %-8s │ %-58s │\n", "-", "-", "No matching files"
-                print bottom
+                if (!seen) {
+                    print title
+                    print ""
+                    print "No matching files."
+                }
             }'
         ;;
 esac
@@ -1624,43 +1627,57 @@ human_path=$path
 
 case "$mode" in
     dir)
-        title="Directory"
-        top="╭────────────┬────────────────────────────────────────────────────────────╮"
-        mid="├────────────┼────────────────────────────────────────────────────────────┤"
-        bottom="╰────────────┴────────────────────────────────────────────────────────────╯"
-        print_val() { printf '│ %-10s │ %-58s │\n' "$1" "$2"; }
-        printf '%s\n' "$title"
-        printf '%s\n' "$top"
-        print_val "Path" "$human_path"
-        print_val "Size" "${size:-'-'}"
-        print_val "Files" "${files:-'-'}"
-        print_val "Ext" "${ext:-'-'}"
-        print_val "Type" "${kind:-'-'}"
-        printf '%s\n' "$mid"
-        print_val "Enter" "print selected directory"
-        print_val "Esc" "go back / quit"
-        printf '%s\n' "$bottom"
+        printf '%s\n' 'Directory'
+        printf '%s\n\n' '─────────'
+        printf '%-8s %s\n' 'Path:' "$human_path"
+        printf '%-8s %s\n' 'Size:' "${size:-'-'}"
+        printf '%-8s %s\n' 'Files:' "${files:-'-'}"
+        printf '%-8s %s\n' 'Ext:' "${ext:-'-'}"
+        printf '%-8s %s\n' 'Type:' "${kind:-'-'}"
+        printf '\n%s\n' 'Actions'
+        printf '%s\n' '───────'
+        printf '%-8s %s\n' 'Enter' 'print selected directory'
+        printf '%-8s %s\n' 'Esc' 'go back / quit'
         ;;
     *)
-        title="File"
-        top="╭────────────┬────────────────────────────────────────────────────────────╮"
-        mid="├────────────┼────────────────────────────────────────────────────────────┤"
-        bottom="╰────────────┴────────────────────────────────────────────────────────────╯"
-        print_val() { printf '│ %-10s │ %-58s │\n' "$1" "$2"; }
-        printf '%s\n' "$title"
-        printf '%s\n' "$top"
-        print_val "Path" "$human_path"
-        print_val "Size" "${size:-'-'}"
-        print_val "Ext" "${ext:-'-'}"
-        print_val "Type" "${kind:-'-'}"
-        printf '%s\n' "$mid"
-        print_val "Enter" "print selected file"
-        print_val "Esc" "go back / quit"
-        printf '%s\n' "$bottom"
+        printf '%s\n' 'File'
+        printf '%s\n\n' '────'
+        printf '%-8s %s\n' 'Path:' "$human_path"
+        printf '%-8s %s\n' 'Size:' "${size:-'-'}"
+        printf '%-8s %s\n' 'Ext:' "${ext:-'-'}"
+        printf '%-8s %s\n' 'Type:' "${kind:-'-'}"
+        printf '\n%s\n' 'Actions'
+        printf '%s\n' '───────'
+        printf '%-8s %s\n' 'Enter' 'print selected file'
+        printf '%-8s %s\n' 'Ctrl-O' 'open selected file with default app'
+        printf '%-8s %s\n' 'Esc' 'go back / quit'
         ;;
 esac
 ITEMPREVIEW
     chmod +x "$item_preview_script"
+}
+
+write_interactive_open_script() {
+    open_script=$1
+    cat >"$open_script" <<'OPENSCRIPT'
+#!/usr/bin/env sh
+set -eu
+
+path=${1:-}
+[ "$path" = "" ] && exit 0
+
+if command -v xdg-open >/dev/null 2>&1; then
+    (xdg-open "$path" >/dev/null 2>&1 &) || true
+elif command -v gio >/dev/null 2>&1; then
+    (gio open "$path" >/dev/null 2>&1 &) || true
+elif command -v open >/dev/null 2>&1; then
+    (open "$path" >/dev/null 2>&1 &) || true
+else
+    printf '%s\n' 'sizes: no opener found (tried xdg-open, gio, open)' >&2
+    exit 1
+fi
+OPENSCRIPT
+    chmod +x "$open_script"
 }
 
 make_interactive_file_list() {
@@ -1693,7 +1710,7 @@ make_interactive_file_list() {
         function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
         {
             size_h = human($1)
-            display = sprintf("%14s  %-10s  %-8s  %s", size_h, $3, $4, clip($2, 100))
+            display = sprintf("%14s  %s", size_h, clip($2, 120))
             print $2, display, $3, $4, $1, size_h
         }
     ' >"$out_file"
@@ -1739,7 +1756,7 @@ make_interactive_dir_list() {
         function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
         {
             size_h = human($1)
-            display = sprintf("%14s  %9s  %-10s  %s", size_h, commas($3), $5, clip($2, 100))
+            display = sprintf("%14s  %9s  %s", size_h, commas($3), clip($2, 120))
             print $2, display, $4, $5, $1, size_h, $3
         }
     ' >"$out_file"
@@ -1786,6 +1803,7 @@ run_interactive_file_browser() {
     records_file=$2
     ext=$3
     item_preview_script=$4
+    open_script=$5
 
     if [ "$ext" = "OTHER" ]; then
         printf '%s\n' 'sizes: OTHER is a folded summary row. Increase --limit or remove filters to inspect files.' >&2
@@ -1801,7 +1819,7 @@ run_interactive_file_browser() {
         return 0
     fi
 
-    title=$(printf 'sizes files — %s · / search · ↑↓ files · Alt-J/K scroll preview · Enter print file · Esc back' "$ext")
+    title=$(printf 'sizes files — %s · / search · ↑↓ files · Ctrl-O open · Enter print · Esc back' "$ext")
     selected_file=$("$fzf_cmd" \
         --ansi \
         --no-sort \
@@ -1810,11 +1828,11 @@ run_interactive_file_browser() {
         --with-nth=2 \
         --header="$title" \
         --prompt='files> ' \
-        --layout=reverse-list \
+        --layout=reverse \
         --info=inline-right \
         --preview="$item_preview_script file {1} {6} {4} {3}" \
-        --bind='alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom' \
-        --preview-window='right:55%:wrap' \
+        --bind="ctrl-o:execute-silent($open_script {1}),alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom" \
+        --preview-window='right:50%:wrap' \
         --height='95%' \
         --border \
         <"$file_list" || true)
@@ -1846,7 +1864,7 @@ run_interactive_dir_browser() {
         return 0
     fi
 
-    title=$(printf 'sizes directories — %s · / search · ↑↓ dirs · Alt-J/K scroll preview · Enter print dir · Esc back' "$ext")
+    title=$(printf 'sizes directories — %s · / search · ↑↓ dirs · Enter print · Esc back' "$ext")
     selected_dir=$("$fzf_cmd" \
         --ansi \
         --no-sort \
@@ -1855,11 +1873,11 @@ run_interactive_dir_browser() {
         --with-nth=2 \
         --header="$title" \
         --prompt='dirs> ' \
-        --layout=reverse-list \
+        --layout=reverse \
         --info=inline-right \
         --preview="$item_preview_script dir {1} {6} {4} {3} {7}" \
         --bind='alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom' \
-        --preview-window='right:55%:wrap' \
+        --preview-window='right:50%:wrap' \
         --height='95%' \
         --border \
         <"$dir_list" || true)
@@ -1882,24 +1900,26 @@ run_interactive() {
     records_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-records.XXXXXX") || exit 1
     preview_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-preview.XXXXXX") || exit 1
     item_preview_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-item-preview.XXXXXX") || exit 1
+    open_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-open.XXXXXX") || exit 1
 
     write_interactive_preview_script "$preview_script"
     write_interactive_item_preview_script "$item_preview_script"
+    write_interactive_open_script "$open_script"
 
     if ! run_interactive_scan "$summary_file" "$records_file"; then
-        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script"
+        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
         exit 1
     fi
 
     if [ ! -s "$summary_file" ]; then
         printf '%s\n' 'sizes: no files found'
         print_errors
-        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script"
+        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
         return 0
     fi
 
     header=$(printf '%s\n%s\n%s' \
-        'sizes interactive — / search · ↑↓ rows · Enter/Ctrl-F browse files · Ctrl-D browse dirs · Alt-J/K preview · Esc quit' \
+        'sizes interactive — / search · ↑↓ rows · Enter/Ctrl-F files · Ctrl-D dirs · Esc quit' \
         '────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────' \
         'EXT           TYPE              SIZE      FILES    SHARE')
 
@@ -1912,11 +1932,11 @@ run_interactive() {
         --with-nth=2 \
         --header="$header" \
         --prompt='sizes> ' \
-        --layout=reverse-list \
+        --layout=reverse \
         --info=inline-right \
         --preview="$preview_script '$records_file' {1} files" \
         --bind='alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom' \
-        --preview-window='right:65%:wrap' \
+        --preview-window='right:50%:wrap' \
         --height='95%' \
         --border \
         <"$summary_file" || true)
@@ -1933,14 +1953,14 @@ run_interactive() {
                     run_interactive_dir_browser "$fzf_cmd" "$records_file" "$selected_ext" "$item_preview_script"
                     ;;
                 *)
-                    run_interactive_file_browser "$fzf_cmd" "$records_file" "$selected_ext" "$item_preview_script"
+                    run_interactive_file_browser "$fzf_cmd" "$records_file" "$selected_ext" "$item_preview_script" "$open_script"
                     ;;
             esac
         fi
     fi
 
     print_errors
-    rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script"
+    rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script" "$open_script"
 }
 
 run_with_progress() {
