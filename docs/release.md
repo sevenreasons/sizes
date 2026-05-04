@@ -1,6 +1,4 @@
-# v0.7.6
+# v0.7.7
 
-Bugfix release for interactive navigation.
-
-- Preserve file and directory cursor position after open/copy/action-menu flows.
-- Keep the interactive search box clear so the full list remains visible.
+- Fix interactive file/directory browsers losing the selected row after action menus.
+- Restore cursor position without leaking the selected path into the search query.

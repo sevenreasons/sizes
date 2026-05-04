@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.6"
+VERSION="0.7.7"
 
 usage() {
     cat <<'USAGE'
@@ -2484,7 +2484,7 @@ run_interactive_file_browser() {
             --layout=reverse \
             --info=inline-right \
             --preview="$item_preview_script file {1} {6} {4} {3}" \
-            --bind="start:pos($cursor_pos),ctrl-o:execute-silent($open_script {1} open),ctrl-p:execute-silent($open_script {1} parent),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
+            --bind="load:pos($cursor_pos),ctrl-o:execute-silent($open_script {1} open),ctrl-p:execute-silent($open_script {1} parent),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
             --preview-window="$preview_window" \
             --height='95%' \
             --border \
@@ -2564,7 +2564,7 @@ run_interactive_dir_browser() {
             --layout=reverse \
             --info=inline-right \
             --preview="$item_preview_script dir {1} {6} {4} {3} {7}" \
-            --bind="start:pos($cursor_pos),ctrl-o:execute-silent($open_script {1} open-dir),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
+            --bind="load:pos($cursor_pos),ctrl-o:execute-silent($open_script {1} open-dir),ctrl-y:execute-silent($open_script {1} copy),$common_bindings" \
             --preview-window="$preview_window" \
             --height='95%' \
             --border \

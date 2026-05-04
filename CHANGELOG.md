@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.7.7
+
+- Preserve file and directory browser cursor position after returning from action menus using fzf's load event.
+- Keep the search box empty while restoring the selected row.
+
+
 ## 0.7.6
 
 - Fix interactive file and directory browsers to preserve cursor position after actions without leaking selected paths into the search box.
