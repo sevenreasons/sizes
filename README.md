@@ -14,7 +14,7 @@ disk usage by extension
 mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/sevenreasons/sizes/master/sizes.sh -o ~/.local/bin/sizes && chmod +x ~/.local/bin/sizes
 ```
 
-Requires GNU `find` because `sizes` uses `find -printf`. `--interactive` also requires `fzf`.
+Requires GNU `find` because `sizes` uses `find -printf`. `--interactive` also requires `fzf`. Optional image previews use `SIZES_IMAGE_PREVIEW=1` plus `chafa`, `viu`, `kitty`, `wezterm`, or `imgcat`.
 Linux usually has it already. On macOS, install GNU findutils:
 
 ```sh
@@ -63,7 +63,7 @@ sizes -r --top-files mp4           # largest files for extension
 sizes -r --top-dirs                # directories using the most space
 sizes -r --top-dirs mp4            # directories using the most MP4 space
 sizes -r --by-dir                  # summarize by immediate child directory
-sizes -r --interactive             # browse extensions, then select files/dirs with fzf
+sizes -r --interactive             # interactive fzf browser: modes, types, files, dirs
 sizes -r --sort files              # sort by file count
 sizes -r --group-by type           # summarize by type instead of extension
 sizes -r --format json             # table, tsv, csv, json
@@ -95,7 +95,7 @@ sizes --no-color                   # no ANSI colors
     --top-files EXT      show largest files for an extension
     --top-dirs [EXT]     show directories using the most space, optionally for EXT
     --by-dir             summarize by immediate child directory
--i, --interactive        browse extensions, files, and directories with fzf
+-i, --interactive        open the fzf interactive browser
     --sort FIELD         size, files, share, ext, type
     --format FORMAT      table, tsv, csv, json
     --save PATH          write output to PATH; infers format from .json/.csv/.tsv
@@ -121,10 +121,14 @@ sizes --no-color                   # no ANSI colors
 - `--include` filters are pushed into `find` where possible, reducing work on large trees.
 - `--top-files` streams candidates through `sort` instead of storing all matches in memory.
 - `--top-dirs` and `--by-dir` help locate where space is coming from.
-- `--interactive` opens an `fzf` browser with aligned colored rows, stable size ordering, search, and previews. Press `Enter` or `Ctrl-F` on an extension to open a selectable file browser; press `Ctrl-D` to open a selectable directory browser. File and directory browsers use the same aligned style, keep the left pane readable, and use a simplified preview. In the file browser, press `Ctrl-O` to open the selected file with the default associated app. Use `Alt-J/K` to scroll previews, `Alt-U/D` to page them, and `Alt-T/B` for top/bottom.
+- `--interactive` opens a mode menu instead of dropping directly into rows. Browse extensions, types, top files, top directories, or directory summaries.
+- Interactive extension/type previews show compact summaries with top directories and top files. Press `Enter` or `Ctrl-F` to open a selectable file browser; press `Ctrl-D` for directories; press `?` for help.
+- Interactive file browser supports `Tab` multi-select, `Ctrl-O` open file, `Ctrl-P` open containing folder, `Ctrl-Y` copy path, and an action menu after `Enter`.
+- Interactive previews are terminal-size aware. Use `Alt-J/K` to scroll previews, `Alt-U/D` to page them, and `Alt-T/B` for top/bottom.
+- Optional image previews are available with `SIZES_IMAGE_PREVIEW=1` when `chafa`, `viu`, `kitty`, `wezterm`, or `imgcat` is installed.
 - JSON output includes metadata such as version, root, mode, elapsed time, skipped paths, partial status, totals, and rows.
 - `--save` writes the selected output directly to a file and infers JSON/CSV/TSV from the filename.
-- Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, `SIZES_FZF=...`, and `SIZES_UPGRADE_URL=...`.
+- Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, `SIZES_FZF=...`, `SIZES_IMAGE_PREVIEW=1`, and `SIZES_UPGRADE_URL=...`.
 
 ## Completions
 

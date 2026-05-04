@@ -17,7 +17,7 @@ _arguments -s -S \
   '--top-files[show largest files for extension]:extension:' \
   '--top-dirs[show directories using the most space, optionally for extension]::extension:' \
   '--by-dir[summarize by immediate child directory]' \
-  '(-i --interactive)'{-i,--interactive}'[browse extension summary interactively with fzf]' \
+  '(-i --interactive)'{-i,--interactive}'[open the fzf interactive browser]' \
   '--sort[sort output]:field:(size files share ext type)' \
   '--format[output format]:format:(table tsv csv json)' \
   '--save[save output to file]:file:_files' \

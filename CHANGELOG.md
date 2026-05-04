@@ -1,11 +1,24 @@
+# Changelog
+
+## 0.6.0
+
+- Replace the direct interactive row view with a start menu for extensions, types, top files, top directories, and directory summaries.
+- Add a type browser with drilldown into extensions, files, and directories.
+- Add compact extension/type preview summaries with top directories and top files.
+- Add interactive help preview via `?`.
+- Add file action menu with open file, open parent folder, copy path, print path, and print details actions.
+- Add `Ctrl-P` to open containing folders and `Ctrl-Y` to copy selected paths.
+- Add multi-select support in the file browser.
+- Make interactive previews terminal-size aware.
+- Add optional image previews with `SIZES_IMAGE_PREVIEW=1` and compatible preview tools.
+- Update README and tests.
+
 ## 0.5.4
 
 - Polish `--interactive` layout so headers stay at the top and the left pane stays readable.
 - Simplify right-side previews by showing size/path lists instead of boxed tables.
 - Simplify file and directory browsers by removing repeated type columns from the selectable list.
 - Add `Ctrl-O` in the file browser to open the selected file with the default associated app.
-
-# Changelog
 
 ## 0.5.3
 

@@ -16,7 +16,7 @@ complete -c sizes -l type -d 'Include detected type; can be repeated' -x -a 'vid
 complete -c sizes -l top-files -d 'Show largest files for extension' -x
 complete -c sizes -l top-dirs -d 'Show directories using the most space, optionally for extension' -x
 complete -c sizes -l by-dir -d 'Summarize by immediate child directory'
-complete -c sizes -s i -l interactive -d 'Browse extension summary interactively with fzf'
+complete -c sizes -s i -l interactive -d 'Open the fzf interactive browser'
 complete -c sizes -l sort -d 'Sort output' -x -a 'size files share ext type'
 complete -c sizes -l format -d 'Output format' -x -a 'table tsv csv json'
 complete -c sizes -l save -d 'Save output to file' -r
