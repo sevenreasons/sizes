@@ -1,10 +1,13 @@
 # Changelog
 
-## 0.5.2
+## 0.5.3
 
-- Fix interactive row layout so the largest entries appear at the top of the list.
-- Add preview-pane navigation bindings for interactive mode.
-- Document interactive preview scrolling keys.
+- Make `--interactive` a real drilldown flow instead of a static preview pane.
+- Press `Enter` or `Ctrl-F` on an extension to open a selectable file browser.
+- Press `Ctrl-D` on an extension to open a selectable directory browser.
+- Add per-file and per-directory preview panes and selected item output.
+- Keep the existing aligned, colored, size-sorted extension browser.
+- Update tests.
 
 ## 0.5.1
 

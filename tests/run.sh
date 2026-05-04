@@ -70,11 +70,11 @@ OUT="$TEST_ROOT/out.txt"
 ERR="$TEST_ROOT/err.txt"
 
 "$SIZES" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.5\.2$' '--version prints current version'
+assert_contains "$OUT" '^sizes 0\.5\.3$' '--version prints current version'
 ok '--version'
 
 "$SIZES_WRAPPER" --version >"$OUT"
-assert_contains "$OUT" '^sizes 0\.5\.2$' 'root wrapper prints current version'
+assert_contains "$OUT" '^sizes 0\.5\.3$' 'root wrapper prints current version'
 ok 'root wrapper'
 
 env NO_COLOR=1 "$SIZES" "$SAMPLE" >"$OUT" 2>"$ERR"
@@ -125,10 +125,10 @@ ok 'CLICOLOR=0'
 UPGRADE_TARGET="$TEST_ROOT/upgradable-sizes"
 UPGRADE_SOURCE="$TEST_ROOT/remote-sizes"
 cp "$SIZES" "$UPGRADE_TARGET"
-sed 's/VERSION="0.5.2"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
+sed 's/VERSION="0.5.3"/VERSION="9.9.9"/' "$SIZES" >"$UPGRADE_SOURCE"
 chmod +x "$UPGRADE_TARGET" "$UPGRADE_SOURCE"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET" "$UPGRADE_TARGET" --upgrade >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes: upgraded .+ from 0\.5\.2 to 9\.9\.9' '--upgrade reports old and new version'
+assert_contains "$OUT" 'sizes: upgraded .+ from 0\.5\.3 to 9\.9\.9' '--upgrade reports old and new version'
 "$UPGRADE_TARGET" --version >"$OUT"
 assert_contains "$OUT" '^sizes 9\.9\.9$' '--upgrade replaces target script'
 ok '--upgrade'
@@ -213,14 +213,14 @@ assert_contains "$OUT" '│ PNG[[:space:]]+│ image' 'follow keeps normal recur
 ok '--follow'
 
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" "$SIZES" --upgrade --check >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'current 0\.5\.2, available 9\.9\.9' 'upgrade check reports available version'
+assert_contains "$OUT" 'current 0\.5\.3, available 9\.9\.9' 'upgrade check reports available version'
 ok '--upgrade --check'
 
 UPGRADE_TARGET_VERSIONED="$TEST_ROOT/upgradable-versioned-sizes"
 cp "$SIZES" "$UPGRADE_TARGET_VERSIONED"
 chmod +x "$UPGRADE_TARGET_VERSIONED"
 env SIZES_UPGRADE_URL="$UPGRADE_SOURCE" SIZES_UPGRADE_TARGET="$UPGRADE_TARGET_VERSIONED" "$UPGRADE_TARGET_VERSIONED" --upgrade --version v9.9.9 >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'from 0\.5\.2 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
+assert_contains "$OUT" 'from 0\.5\.3 to 9\.9\.9' 'upgrade version installs requested source when override URL is used'
 ok '--upgrade --version'
 
 
@@ -269,7 +269,7 @@ mkdir -p "$FAKE_BIN"
 cat >"$FAKE_BIN/fzf" <<'FAKEFZF'
 #!/usr/bin/env sh
 if [ "${FZF_ARGS_LOG:-}" != "" ]; then
-    printf '%s\n' "$*" >"$FZF_ARGS_LOG"
+    printf '%s\n' "$*" >>"$FZF_ARGS_LOG"
 fi
 sed -n '1p'
 FAKEFZF
@@ -277,10 +277,11 @@ chmod +x "$FAKE_BIN/fzf"
 
 FZF_ARGS_LOG="$TEST_ROOT/fzf-args.log"
 env NO_COLOR=1 FZF_ARGS_LOG="$FZF_ARGS_LOG" PATH="$FAKE_BIN:$PATH" "$SIZES" -r --interactive --no-progress "$SAMPLE" >"$OUT" 2>"$ERR"
-assert_contains "$OUT" 'sizes — selected extension' 'interactive mode prints selected extension table'
-assert_contains "$OUT" 'Top files for' 'interactive mode prints top-files preview after selection'
+assert_contains "$OUT" 'sizes — selected file' 'interactive mode lets users select an individual file'
+assert_contains "$OUT" 'junk\.mp4|video\.mp4' 'interactive file browser prints selected file path'
 assert_contains "$FZF_ARGS_LOG" '--layout=reverse-list' 'interactive mode shows largest rows at top'
 assert_contains "$FZF_ARGS_LOG" 'preview-down' 'interactive mode binds preview scrolling'
+assert_contains "$FZF_ARGS_LOG" 'files> ' 'interactive mode opens a selectable file browser'
 ok '--interactive'
 
 printf '\n%d tests passed\n' "$pass"

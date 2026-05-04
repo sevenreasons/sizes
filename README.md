@@ -63,7 +63,7 @@ sizes -r --top-files mp4           # largest files for extension
 sizes -r --top-dirs                # directories using the most space
 sizes -r --top-dirs mp4            # directories using the most MP4 space
 sizes -r --by-dir                  # summarize by immediate child directory
-sizes -r --interactive             # browse extension summary with fzf
+sizes -r --interactive             # browse extensions, then select files/dirs with fzf
 sizes -r --sort files              # sort by file count
 sizes -r --group-by type           # summarize by type instead of extension
 sizes -r --format json             # table, tsv, csv, json
@@ -95,7 +95,7 @@ sizes --no-color                   # no ANSI colors
     --top-files EXT      show largest files for an extension
     --top-dirs [EXT]     show directories using the most space, optionally for EXT
     --by-dir             summarize by immediate child directory
--i, --interactive        browse extension summary interactively with fzf
+-i, --interactive        browse extensions, files, and directories with fzf
     --sort FIELD         size, files, share, ext, type
     --format FORMAT      table, tsv, csv, json
     --save PATH          write output to PATH; infers format from .json/.csv/.tsv
@@ -121,7 +121,7 @@ sizes --no-color                   # no ANSI colors
 - `--include` filters are pushed into `find` where possible, reducing work on large trees.
 - `--top-files` streams candidates through `sort` instead of storing all matches in memory.
 - `--top-dirs` and `--by-dir` help locate where space is coming from.
-- `--interactive` opens an `fzf` browser with aligned colored rows, stable size ordering, search, and previews. Use `Ctrl-F` for top files, `Ctrl-D` for top directories, `Alt-J/K` to scroll the preview, `Alt-U/D` to page it, and `Alt-T/B` for top/bottom.
+- `--interactive` opens an `fzf` browser with aligned colored rows, stable size ordering, search, and previews. Press `Enter` or `Ctrl-F` on an extension to open a selectable file browser; press `Ctrl-D` to open a selectable directory browser. Use `Alt-J/K` to scroll previews, `Alt-U/D` to page them, and `Alt-T/B` for top/bottom.
 - JSON output includes metadata such as version, root, mode, elapsed time, skipped paths, partial status, totals, and rows.
 - `--save` writes the selected output directly to a file and infers JSON/CSV/TSV from the filename.
 - Supports `NO_COLOR=1`, `CLICOLOR=0`, `SIZES_EXCLUDE=".git node_modules"`, `SIZES_DEBUG_TIMING=1`, `SIZES_FZF=...`, and `SIZES_UPGRADE_URL=...`.

@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.5.2"
+VERSION="0.5.3"
 
 usage() {
     cat <<'USAGE'
@@ -1586,6 +1586,291 @@ run_interactive_scan() {
     generate_interactive_data "$records_file" >"$summary_file"
 }
 
+interactive_select_parts() {
+    # Prints key on line 1 and selected row on line 2.
+    # Supports both real fzf --expect output and minimal fake-fzf test output.
+    fzf_output=$1
+    first=$(printf '%s\n' "$fzf_output" | sed -n '1p')
+    second=$(printf '%s\n' "$fzf_output" | sed -n '2p')
+
+    case "$first" in
+        enter|ctrl-f|ctrl-d)
+            printf '%s\n%s\n' "$first" "$second"
+            ;;
+        '')
+            printf '%s\n%s\n' '' ''
+            ;;
+        *)
+            printf '%s\n%s\n' 'enter' "$first"
+            ;;
+    esac
+}
+
+write_interactive_item_preview_script() {
+    item_preview_script=$1
+    cat >"$item_preview_script" <<'ITEMPREVIEW'
+#!/usr/bin/env sh
+set -eu
+
+mode=${1:-file}
+path=${2:-}
+size=${3:-}
+kind=${4:-}
+ext=${5:-}
+files=${6:-}
+
+human_path=$path
+[ "$human_path" = "" ] && human_path="-"
+
+case "$mode" in
+    dir)
+        title="Directory"
+        top="╭────────────┬────────────────────────────────────────────────────────────╮"
+        mid="├────────────┼────────────────────────────────────────────────────────────┤"
+        bottom="╰────────────┴────────────────────────────────────────────────────────────╯"
+        print_val() { printf '│ %-10s │ %-58s │\n' "$1" "$2"; }
+        printf '%s\n' "$title"
+        printf '%s\n' "$top"
+        print_val "Path" "$human_path"
+        print_val "Size" "${size:-'-'}"
+        print_val "Files" "${files:-'-'}"
+        print_val "Ext" "${ext:-'-'}"
+        print_val "Type" "${kind:-'-'}"
+        printf '%s\n' "$mid"
+        print_val "Enter" "print selected directory"
+        print_val "Esc" "go back / quit"
+        printf '%s\n' "$bottom"
+        ;;
+    *)
+        title="File"
+        top="╭────────────┬────────────────────────────────────────────────────────────╮"
+        mid="├────────────┼────────────────────────────────────────────────────────────┤"
+        bottom="╰────────────┴────────────────────────────────────────────────────────────╯"
+        print_val() { printf '│ %-10s │ %-58s │\n' "$1" "$2"; }
+        printf '%s\n' "$title"
+        printf '%s\n' "$top"
+        print_val "Path" "$human_path"
+        print_val "Size" "${size:-'-'}"
+        print_val "Ext" "${ext:-'-'}"
+        print_val "Type" "${kind:-'-'}"
+        printf '%s\n' "$mid"
+        print_val "Enter" "print selected file"
+        print_val "Esc" "go back / quit"
+        printf '%s\n' "$bottom"
+        ;;
+esac
+ITEMPREVIEW
+    chmod +x "$item_preview_script"
+}
+
+make_interactive_file_list() {
+    records_file=$1
+    ext=$2
+    out_file=$3
+
+    awk -F"$field_sep" -v target="$ext" -v OFS="$field_sep" '
+        function human(n,    u, units) {
+            split("B KiB MiB GiB TiB PiB", units, " ")
+            u = 1
+            while (n >= 1024 && u < 6) { n /= 1024; u++ }
+            if (u == 1) return sprintf("%9.0f %s", n, units[u])
+            return sprintf("%9.2f %s", n, units[u])
+        }
+        function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+        target == "TOTAL" || toupper($3) == toupper(target) {
+            print $1, $2, $3, $4
+        }
+    ' "$records_file" \
+    | LC_ALL=C sort -t "$field_sep" -k1,1nr \
+    | awk -F"$field_sep" -v OFS="$field_sep" '
+        function human(n,    u, units) {
+            split("B KiB MiB GiB TiB PiB", units, " ")
+            u = 1
+            while (n >= 1024 && u < 6) { n /= 1024; u++ }
+            if (u == 1) return sprintf("%9.0f %s", n, units[u])
+            return sprintf("%9.2f %s", n, units[u])
+        }
+        function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+        {
+            size_h = human($1)
+            display = sprintf("%14s  %-10s  %-8s  %s", size_h, $3, $4, clip($2, 100))
+            print $2, display, $3, $4, $1, size_h
+        }
+    ' >"$out_file"
+}
+
+make_interactive_dir_list() {
+    records_file=$1
+    ext=$2
+    out_file=$3
+
+    awk -F"$field_sep" -v target="$ext" -v OFS="$field_sep" '
+        function dirname(path,    d) {
+            d = path
+            sub(/\/[^\/]*$/, "", d)
+            if (d == "" || d == path) return "."
+            return d
+        }
+        target == "TOTAL" || toupper($3) == toupper(target) {
+            d = dirname($2)
+            bytes[d] += $1
+            files[d] += 1
+            ext_for[d] = target
+            type_for[d] = $4
+        }
+        END {
+            for (d in bytes) print bytes[d], d, files[d], ext_for[d], type_for[d]
+        }
+    ' "$records_file" \
+    | LC_ALL=C sort -t "$field_sep" -k1,1nr \
+    | awk -F"$field_sep" -v OFS="$field_sep" '
+        function human(n,    u, units) {
+            split("B KiB MiB GiB TiB PiB", units, " ")
+            u = 1
+            while (n >= 1024 && u < 6) { n /= 1024; u++ }
+            if (u == 1) return sprintf("%9.0f %s", n, units[u])
+            return sprintf("%9.2f %s", n, units[u])
+        }
+        function commas(n,    s, out) {
+            s = sprintf("%d", n); out = ""
+            while (length(s) > 3) { out = "," substr(s, length(s) - 2) out; s = substr(s, 1, length(s) - 3) }
+            return s out
+        }
+        function clip(s, w) { return length(s) > w ? substr(s, 1, w - 1) "~" : s }
+        {
+            size_h = human($1)
+            display = sprintf("%14s  %9s  %-10s  %s", size_h, commas($3), $5, clip($2, 100))
+            print $2, display, $4, $5, $1, size_h, $3
+        }
+    ' >"$out_file"
+}
+
+print_selected_file() {
+    selected_file=$1
+    printf '%s\n' "$selected_file" | awk -F"$field_sep" '
+        BEGIN {
+            top = "╭────────────────┬──────────┬────────────────────────────────────────────────────────────╮"
+            mid = "├────────────────┼──────────┼────────────────────────────────────────────────────────────┤"
+            bottom = "╰────────────────┴──────────┴────────────────────────────────────────────────────────────╯"
+            print "sizes — selected file"
+            print top
+            printf "│ %14s │ %-8s │ %-58s │\n", "SIZE", "TYPE", "PATH"
+            print mid
+        }
+        {
+            printf "│ %14s │ %-8s │ %-58s │\n", $6, $4, substr($1, 1, 58)
+        }
+        END { print bottom }'
+}
+
+print_selected_dir() {
+    selected_dir=$1
+    printf '%s\n' "$selected_dir" | awk -F"$field_sep" '
+        BEGIN {
+            top = "╭────────────────┬───────────┬────────────────────────────────────────────────────────────╮"
+            mid = "├────────────────┼───────────┼────────────────────────────────────────────────────────────┤"
+            bottom = "╰────────────────┴───────────┴────────────────────────────────────────────────────────────╯"
+            print "sizes — selected directory"
+            print top
+            printf "│ %14s │ %9s │ %-58s │\n", "SIZE", "FILES", "PATH"
+            print mid
+        }
+        {
+            printf "│ %14s │ %9d │ %-58s │\n", $6, $7, substr($1, 1, 58)
+        }
+        END { print bottom }'
+}
+
+run_interactive_file_browser() {
+    fzf_cmd=$1
+    records_file=$2
+    ext=$3
+    item_preview_script=$4
+
+    if [ "$ext" = "OTHER" ]; then
+        printf '%s\n' 'sizes: OTHER is a folded summary row. Increase --limit or remove filters to inspect files.' >&2
+        return 0
+    fi
+
+    file_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-files.XXXXXX") || exit 1
+    make_interactive_file_list "$records_file" "$ext" "$file_list"
+
+    if [ ! -s "$file_list" ]; then
+        rm -f "$file_list"
+        printf '%s\n' 'sizes: no matching files'
+        return 0
+    fi
+
+    title=$(printf 'sizes files — %s · / search · ↑↓ files · Alt-J/K scroll preview · Enter print file · Esc back' "$ext")
+    selected_file=$("$fzf_cmd" \
+        --ansi \
+        --no-sort \
+        --cycle \
+        --delimiter="$field_sep" \
+        --with-nth=2 \
+        --header="$title" \
+        --prompt='files> ' \
+        --layout=reverse-list \
+        --info=inline-right \
+        --preview="$item_preview_script file {1} {6} {4} {3}" \
+        --bind='alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom' \
+        --preview-window='right:55%:wrap' \
+        --height='95%' \
+        --border \
+        <"$file_list" || true)
+
+    rm -f "$file_list"
+
+    if [ "$selected_file" != "" ]; then
+        print_selected_file "$selected_file"
+    fi
+}
+
+run_interactive_dir_browser() {
+    fzf_cmd=$1
+    records_file=$2
+    ext=$3
+    item_preview_script=$4
+
+    if [ "$ext" = "OTHER" ]; then
+        printf '%s\n' 'sizes: OTHER is a folded summary row. Increase --limit or remove filters to inspect directories.' >&2
+        return 0
+    fi
+
+    dir_list=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-dirs.XXXXXX") || exit 1
+    make_interactive_dir_list "$records_file" "$ext" "$dir_list"
+
+    if [ ! -s "$dir_list" ]; then
+        rm -f "$dir_list"
+        printf '%s\n' 'sizes: no matching directories'
+        return 0
+    fi
+
+    title=$(printf 'sizes directories — %s · / search · ↑↓ dirs · Alt-J/K scroll preview · Enter print dir · Esc back' "$ext")
+    selected_dir=$("$fzf_cmd" \
+        --ansi \
+        --no-sort \
+        --cycle \
+        --delimiter="$field_sep" \
+        --with-nth=2 \
+        --header="$title" \
+        --prompt='dirs> ' \
+        --layout=reverse-list \
+        --info=inline-right \
+        --preview="$item_preview_script dir {1} {6} {4} {3} {7}" \
+        --bind='alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom' \
+        --preview-window='right:55%:wrap' \
+        --height='95%' \
+        --border \
+        <"$dir_list" || true)
+
+    rm -f "$dir_list"
+
+    if [ "$selected_dir" != "" ]; then
+        print_selected_dir "$selected_dir"
+    fi
+}
+
 run_interactive() {
     fzf_cmd=${SIZES_FZF:-fzf}
     if ! command -v "$fzf_cmd" >/dev/null 2>&1; then
@@ -1596,30 +1881,33 @@ run_interactive() {
     summary_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-summary.XXXXXX") || exit 1
     records_file=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-records.XXXXXX") || exit 1
     preview_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-preview.XXXXXX") || exit 1
+    item_preview_script=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-item-preview.XXXXXX") || exit 1
 
     write_interactive_preview_script "$preview_script"
+    write_interactive_item_preview_script "$item_preview_script"
 
     if ! run_interactive_scan "$summary_file" "$records_file"; then
-        rm -f "$summary_file" "$records_file" "$preview_script"
+        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script"
         exit 1
     fi
 
     if [ ! -s "$summary_file" ]; then
         printf '%s\n' 'sizes: no files found'
         print_errors
-        rm -f "$summary_file" "$records_file" "$preview_script"
+        rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script"
         return 0
     fi
 
     header=$(printf '%s\n%s\n%s' \
-        'sizes interactive — / search · ↑↓ rows · Ctrl-F files · Ctrl-D dirs · Alt-J/K scroll preview · Alt-U/D page preview · Enter details · Esc quit' \
+        'sizes interactive — / search · ↑↓ rows · Enter/Ctrl-F browse files · Ctrl-D browse dirs · Alt-J/K preview · Esc quit' \
         '────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────' \
         'EXT           TYPE              SIZE      FILES    SHARE')
 
-    selected=$("$fzf_cmd" \
+    fzf_out=$("$fzf_cmd" \
         --ansi \
         --no-sort \
         --cycle \
+        --expect=enter,ctrl-f,ctrl-d \
         --delimiter="$field_sep" \
         --with-nth=2 \
         --header="$header" \
@@ -1627,38 +1915,32 @@ run_interactive() {
         --layout=reverse-list \
         --info=inline-right \
         --preview="$preview_script '$records_file' {1} files" \
-        --bind="ctrl-f:change-preview($preview_script '$records_file' {1} files)" \
-        --bind="ctrl-d:change-preview($preview_script '$records_file' {1} dirs)" \
         --bind='alt-j:preview-down,alt-k:preview-up,alt-d:preview-page-down,alt-u:preview-page-up,alt-t:preview-top,alt-b:preview-bottom' \
         --preview-window='right:65%:wrap' \
         --height='95%' \
         --border \
         <"$summary_file" || true)
 
-    if [ "$selected" != "" ]; then
-        selected_ext=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $1 }')
-        printf '%s\n' "$selected" | awk -F"$field_sep" '
-            BEGIN {
-                top = "╭──────────────┬──────────┬────────────────┬───────────┬──────────╮"
-                mid = "├──────────────┼──────────┼────────────────┼───────────┼──────────┤"
-                bottom = "╰──────────────┴──────────┴────────────────┴───────────┴──────────╯"
-                print "sizes — selected extension"
-                print top
-                printf "│ %-12s │ %-8s │ %14s │ %9s │ %8s │\n", "EXT", "TYPE", "SIZE", "FILES", "SHARE"
-                print mid
-            }
-            {
-                printf "│ %-12s │ %-8s │ %14s │ %9s │ %7.2f%% │\n", $1, $3, $5, $6, $7
-            }
-            END { print bottom }'
-        printf '\n'
-        "$preview_script" "$records_file" "$selected_ext" files
-        printf '\n'
-        "$preview_script" "$records_file" "$selected_ext" dirs
+    if [ "$fzf_out" != "" ]; then
+        parsed=$(interactive_select_parts "$fzf_out")
+        key=$(printf '%s\n' "$parsed" | sed -n '1p')
+        selected=$(printf '%s\n' "$parsed" | sed -n '2p')
+
+        if [ "$selected" != "" ]; then
+            selected_ext=$(printf '%s\n' "$selected" | awk -F"$field_sep" '{ print $1 }')
+            case "$key" in
+                ctrl-d)
+                    run_interactive_dir_browser "$fzf_cmd" "$records_file" "$selected_ext" "$item_preview_script"
+                    ;;
+                *)
+                    run_interactive_file_browser "$fzf_cmd" "$records_file" "$selected_ext" "$item_preview_script"
+                    ;;
+            esac
+        fi
     fi
 
     print_errors
-    rm -f "$summary_file" "$records_file" "$preview_script"
+    rm -f "$summary_file" "$records_file" "$preview_script" "$item_preview_script"
 }
 
 run_with_progress() {
