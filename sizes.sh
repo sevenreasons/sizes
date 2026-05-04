@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.0"
+VERSION="0.7.1"
 
 usage() {
     cat <<'USAGE'
@@ -1659,9 +1659,7 @@ run_interactive_scan() {
 
         printf '%s
 ' "sizes: scanning $dir ($mode)..." >&2
-        printf '%s
-' "sizes: scanning $dir ($mode)..." >&2
-    generate_interactive_data "$records_file" >"$summary_file" 2>"$progress_err" &
+        generate_interactive_data "$records_file" >"$summary_file" 2>"$progress_err" &
         progress_pid=$!
         progress_i=0
 
@@ -2537,7 +2535,7 @@ print_interactive_scan_summary() {
             return sprintf("%.2f %s", n, units[u])
         }
         { bytes += $1; files += 1 }
-        END { printf "sizes: scanned %d files · %s · opening interactive browser...\n", files, human(bytes) }
+        END { printf "sizes: scanned %d files · %s · opening interactive browser\n", files, human(bytes) }
     ' "$records_file" >&2
 }
 
