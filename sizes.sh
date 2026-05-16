@@ -4,7 +4,7 @@
 
 set -u
 
-VERSION="0.7.10"
+VERSION="0.7.11"
 
 usage() {
     cat <<'USAGE'
@@ -1660,11 +1660,15 @@ case "$preview_mode" in
                 if (u == 1) return sprintf("%.0f %s", n, units[u])
                 return sprintf("%.2f %s", n, units[u])
             }
+            { grand += $1 }
             keep() { bytes += $1; files += 1; if (kind == "") kind = $4 }
             END {
+                share = grand ? bytes * 100 / grand : 0
+                if (target == "TOTAL" && grand > 0) share = 100
                 printf "%-10s %s\n", "Type:", (target_type != "" ? target_type : kind)
                 printf "%-10s %s\n", "Size:", human(bytes)
                 printf "%-10s %d\n", "Files:", files
+                printf "%-10s %.2f%%\n", "Share:", share
             }' "$records_file"
         printf '\n%s\n' 'Top directories'
         printf '%s\n' '───────────────'
@@ -2016,11 +2020,11 @@ make_interactive_type_list() {
     out_file=$2
 
     awk -F"$field_sep" -v OFS="$field_sep" '
-        { bytes[$4] += $1; files[$4] += 1 }
-        END { for (t in bytes) print bytes[t], t, files[t] }
+        { bytes[$4] += $1; files[$4] += 1; total += $1 }
+        END { for (t in bytes) print bytes[t], t, files[t], total }
     ' "$records_file" \
     | LC_ALL=C sort -t "$field_sep" -k1,1nr \
-    | awk -F"$field_sep" -v OFS="$field_sep" '
+    | awk -F"$field_sep" -v OFS="$field_sep" -v color="$color" '
         function human(n,    u, units) {
             split("B KiB MiB GiB TiB PiB", units, " ")
             u = 1
@@ -2028,12 +2032,162 @@ make_interactive_type_list() {
             if (u == 1) return sprintf("%.0f %s", n, units[u])
             return sprintf("%.2f %s", n, units[u])
         }
-        function commas(n,    s, out) {
-            s = sprintf("%d", n); out = ""
-            while (length(s) > 3) { out = "," substr(s, length(s) - 2) out; s = substr(s, 1, length(s) - 3) }
-            return s out
+        function commas(n,    ss, out) {
+            ss = sprintf("%d", n); out = ""
+            while (length(ss) > 3) { out = "," substr(ss, length(ss) - 2) out; ss = substr(ss, 1, length(ss) - 3) }
+            return ss out
         }
-        { display = sprintf("%-12s  %11s  %8s", $2, human($1), commas($3)); print "TYPE:" $2, display, $2, $1, human($1), $3 }
+        function kind_color(k) {
+            if (!color) return ""
+            if (k == "video") return red
+            if (k == "image") return magenta
+            if (k == "audio") return blue
+            if (k == "archive") return yellow
+            if (k == "doc") return green
+            if (k == "data" || k == "database" || k == "code") return cyan
+            if (k == "model" || k == "game") return yellow
+            if (k == "font") return magenta
+            if (k == "3d" || k == "subs") return green
+            if (k == "binary") return red
+            if (k == "meta" || k == "none") return gray
+            if (k == "mixed" || k == "all") return white
+            return cyan
+        }
+        function heat_color(bytes, p) {
+            if (!color) return ""
+            if (bytes >= 10 * 1024 * 1024 * 1024 || p >= 20) return red
+            if (bytes >= 1024 * 1024 * 1024 || p >= 5) return yellow
+            if (bytes >= 100 * 1024 * 1024 || p >= 1) return green
+            if (bytes > 0) return gray
+            return gray
+        }
+        function row_display(t, bytes, files, total,    share, tc, sc, h, c) {
+            share = total ? bytes * 100 / total : 0
+            tc = kind_color(t)
+            sc = heat_color(bytes, share)
+            h = human(bytes)
+            c = commas(files)
+            return sprintf("%s%-12s%s  %s%11s%s  %8s  %7.2f%%", tc, t, reset, sc, h, reset, c, share)
+        }
+        BEGIN {
+            if (color) {
+                reset = "\033[0m"; red = "\033[31m"; green = "\033[32m"; yellow = "\033[33m"; blue = "\033[34m"; magenta = "\033[35m"; cyan = "\033[36m"; white = "\033[97m"; gray = "\033[90m"
+            } else {
+                reset = red = green = yellow = blue = magenta = cyan = white = gray = ""
+            }
+        }
+        {
+            share = $4 ? $1 * 100 / $4 : 0
+            print "TYPE:" $2, row_display($2, $1, $3, $4), $2, $1, human($1), $3, sprintf("%.2f", share)
+        }
+    ' >"$out_file"
+}
+
+make_interactive_extension_type_list() {
+    records_file=$1
+    type_filter=$2
+    out_file=$3
+
+    awk -F"$field_sep" -v t="$type_filter" -v sort_by="$sort_by" -v OFS="$field_sep" '
+        $4 == t {
+            bytes[$3] += $1
+            files[$3] += 1
+            total += $1
+            total_files += 1
+        }
+        END {
+            for (e in bytes) {
+                share = total ? bytes[e] * 100 / total : 0
+                if (sort_by == "files") sortkey = files[e]
+                else if (sort_by == "ext") sortkey = e
+                else if (sort_by == "type") sortkey = t " " e
+                else if (sort_by == "share") sortkey = share
+                else sortkey = bytes[e]
+                print sortkey, bytes[e], files[e], e, t, total, total_files
+            }
+        }
+    ' "$records_file" \
+    | sort_records \
+    | awk -F"$field_sep" -v OFS="$field_sep" -v color="$color" -v limit="$limit" -v min_size="$min_size" -v min_share="$min_share" -v type_filter="$type_filter" '
+        function human(n,    u, units) {
+            split("B KiB MiB GiB TiB PiB", units, " ")
+            u = 1
+            while (n >= 1024 && u < 6) { n /= 1024; u++ }
+            if (u == 1) return sprintf("%.0f %s", n, units[u])
+            return sprintf("%.2f %s", n, units[u])
+        }
+        function commas(n,    ss, out) {
+            ss = sprintf("%d", n); out = ""
+            while (length(ss) > 3) { out = "," substr(ss, length(ss) - 2) out; ss = substr(ss, 1, length(ss) - 3) }
+            return ss out
+        }
+        function kind_color(k) {
+            if (!color) return ""
+            if (k == "video") return red
+            if (k == "image") return magenta
+            if (k == "audio") return blue
+            if (k == "archive") return yellow
+            if (k == "doc") return green
+            if (k == "data" || k == "database" || k == "code") return cyan
+            if (k == "model" || k == "game") return yellow
+            if (k == "font") return magenta
+            if (k == "3d" || k == "subs") return green
+            if (k == "binary") return red
+            if (k == "meta" || k == "none") return gray
+            if (k == "mixed" || k == "all") return white
+            return cyan
+        }
+        function heat_color(bytes, p) {
+            if (!color) return ""
+            if (bytes >= 10 * 1024 * 1024 * 1024 || p >= 20) return red
+            if (bytes >= 1024 * 1024 * 1024 || p >= 5) return yellow
+            if (bytes >= 100 * 1024 * 1024 || p >= 1) return green
+            if (bytes > 0) return gray
+            return gray
+        }
+        function row_display(name, k, bytes, files, total, is_total,    share, lc, sc, h, c) {
+            share = total ? bytes * 100 / total : 0
+            if (is_total && total > 0) share = 100
+            lc = is_total ? white : kind_color(k)
+            sc = is_total ? white : heat_color(bytes, share)
+            h = human(bytes)
+            c = commas(files)
+            return sprintf("%s%-12s%s  %s%-10s%s  %s%11s%s  %8s  %7.2f%%", lc, name, reset, kind_color(k), k, reset, sc, h, reset, c, share)
+        }
+        BEGIN {
+            limited = limit + 0 > 0
+            if (color) {
+                reset = "\033[0m"; red = "\033[31m"; green = "\033[32m"; yellow = "\033[33m"; blue = "\033[34m"; magenta = "\033[35m"; cyan = "\033[36m"; white = "\033[97m"; gray = "\033[90m"
+            } else {
+                reset = red = green = yellow = blue = magenta = cyan = white = gray = ""
+            }
+        }
+        {
+            seen = 1
+            bytes = $2 + 0
+            files = $3 + 0
+            ext = $4
+            k = $5
+            total_bytes = $6 + 0
+            total_count = $7 + 0
+            share = total_bytes ? bytes * 100 / total_bytes : 0
+            filtered = ((min_size + 0 > 0 && bytes < min_size) || (min_share + 0 >= 0 && share < min_share))
+            if (!filtered && (!limited || shown < limit)) {
+                print ext, row_display(ext, k, bytes, files, total_bytes, 0), k, bytes, human(bytes), files, sprintf("%.2f", share)
+                shown++
+            } else {
+                other_bytes += bytes
+                other_count += files
+                other_types++
+            }
+        }
+        END {
+            if (other_types > 0) {
+                share = total_bytes ? other_bytes * 100 / total_bytes : 0
+                print "OTHER", row_display("OTHER", "mixed", other_bytes, other_count, total_bytes, 0), "mixed", other_bytes, human(other_bytes), other_count, sprintf("%.2f", share)
+            }
+            if (seen) print "TYPE:" type_filter, row_display("TOTAL", type_filter, total_bytes, total_count, total_bytes, 1), type_filter, total_bytes, human(total_bytes), total_count, "100.00"
+        }
     ' >"$out_file"
 }
 
@@ -2745,7 +2899,7 @@ run_interactive_extension_browser() {
         tmp_filtered=
         if [ "$type_filter" != "" ]; then
             tmp_filtered=$(mktemp "${TMPDIR:-/tmp}/sizes-interactive-ext.XXXXXX") || exit 1
-            awk -F"$field_sep" -v t="$type_filter" '$3 == t || $1 == "TOTAL" { print }' "$summary_file" >"$tmp_filtered"
+            make_interactive_extension_type_list "$records_file" "$type_filter" "$tmp_filtered"
             ext_input=$tmp_filtered
         fi
 
@@ -2825,7 +2979,7 @@ run_interactive_type_browser() {
             --expect=enter,ctrl-f,ctrl-d \
             --delimiter="$field_sep" \
             --with-nth=2 \
-            --header="$(interactive_screen_header 'sizes › types' 'Enter extensions · Ctrl-F files · Ctrl-D dirs · ? help · Esc back · Ctrl-Q quit' 'TYPE             SIZE      FILES')" \
+            --header="$(interactive_screen_header 'sizes › types' 'Enter extensions · Ctrl-F files · Ctrl-D dirs · ? help · Esc back · Ctrl-Q quit' 'TYPE             SIZE      FILES     SHARE')" \
             --prompt='sizes › types> ' \
             --query="$query" \
             --layout=reverse \

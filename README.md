@@ -72,7 +72,7 @@ sizes -r -i --allow-delete       # enable permanent delete actions
 sizes -r -i
 ```
 
-Interactive mode is an `fzf` drilldown UI. It starts at a mode menu, then lets you browse extensions, types, top files, top directories, and directory summaries.
+Interactive mode is an `fzf` drilldown UI. It starts at a mode menu, then lets you browse extensions, types, top files, top directories, and directory summaries. Extension and type rows use the same color coding as the normal table unless colors are disabled.
 
 Main navigation:
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.11
+
+- Add color coding to the interactive Types browser so type rows match extension rows.
+- Add a Share column to the interactive Types browser.
+- Show share percentage in interactive type previews.
+- Recompute type drilldown extension rows against the selected type instead of leaking global totals/shares.
+
 ## 0.7.10
 
 - Add interactive trash actions for files and directories.
